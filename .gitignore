@@ -1,0 +1,9 @@
+node_modules/
+build/
+dist/
+dist-plugin/
+coverage/
+.DS_Store
+*.log
+.env*
+src/pluginFiles.ts

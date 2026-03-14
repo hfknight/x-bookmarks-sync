@@ -1,0 +1,10 @@
+{
+  "id": "x-bookmarks-sync",
+  "name": "X Bookmarks Sync",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Sync your X (Twitter) bookmarks to Obsidian.",
+  "author": "Fei",
+  "authorUrl": "https://github.com/hfknight",
+  "isDesktopOnly": true
+}
