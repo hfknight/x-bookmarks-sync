@@ -338,7 +338,7 @@ class XBookmarksView extends ItemView {
     }
   }
 
-  async autoScrollAndExtract() {
+  private async autoScrollAndExtract() {
     if (!this.webview) return;
     if (this.isScrolling) return;
 
