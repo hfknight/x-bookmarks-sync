@@ -122,6 +122,7 @@ class XBookmarksView extends ItemView {
   currentUrl: string = 'https://x.com/i/bookmarks';
   hintSpan: HTMLElement | null = null;
   isScrolling: boolean = false;
+  cancelRequested: boolean = false;
   collectedBookmarks: Map<string, any> = new Map();
 
   constructor(leaf: WorkspaceLeaf, plugin: XBookmarksSync) {
@@ -141,6 +142,8 @@ class XBookmarksView extends ItemView {
   }
 
   async onOpen() {
+    this.isScrolling = false;
+    this.cancelRequested = false;
     const container = this.containerEl.children[1];
     container.empty();
 
@@ -307,7 +310,7 @@ class XBookmarksView extends ItemView {
     if (!this.hintSpan) return;
     this.hintSpan.setText(`Loading bookmarks... ${count} found`);
     this.extractBtn.innerText = 'Cancel';
-    this.extractBtn.onclick = () => { this.isScrolling = false; };
+    this.extractBtn.onclick = () => { this.cancelRequested = true; };
   }
 
   private async pollFlag(): Promise<boolean> {
@@ -345,6 +348,7 @@ class XBookmarksView extends ItemView {
     try {
       // Setup
       this.isScrolling = true;
+      this.cancelRequested = false;
       this.collectedBookmarks = new Map();
       let noNewCount = 0;
       let iterationCount = 0;
@@ -388,8 +392,9 @@ class XBookmarksView extends ItemView {
         iterationCount++;
 
         // Check cancel
-        if (!this.isScrolling) {
+        if (this.cancelRequested) {
           await this.cleanup();
+          this.cancelRequested = false;
           this.isScrolling = false;
           this.updateToolbar();
           return;
@@ -460,6 +465,7 @@ class XBookmarksView extends ItemView {
     } catch (err) {
       console.error('autoScrollAndExtract error:', err);
       await this.cleanup();
+      this.cancelRequested = false;
       this.isScrolling = false;
       this.updateToolbar();
       new Notice('Error during bookmark capture.');
