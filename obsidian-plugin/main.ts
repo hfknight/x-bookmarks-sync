@@ -303,32 +303,169 @@ class XBookmarksView extends ItemView {
     `;
   }
 
-  async extractBookmarks() {
-    if (!this.webview) return;
-    new Notice('Extracting bookmarks from current view...');
+  private setScrollingToolbar(count: number) {
+    if (!this.hintSpan) return;
+    this.hintSpan.setText(`Loading bookmarks... ${count} found`);
+    this.extractBtn.innerText = 'Cancel';
+    this.extractBtn.onclick = () => { this.isScrolling = false; };
+  }
 
-    const script = this.getExtractionScript();
-
-    try {
-      const result = await this.webview.executeJavaScript(script);
-      if (result && result.success) {
-        const bookmarks = result.data;
-        if (bookmarks && bookmarks.length > 0) {
-          new BookmarkSelectionModal(this.app, this.plugin, bookmarks).open();
-        } else {
-          new Notice(
-            'No bookmarks found. Make sure you are on the bookmarks page and tweets are loaded.'
-          );
-        }
-      } else {
-        console.error('Scraping error from webview:', result.error);
-        new Notice('Failed to extract bookmarks: ' + result.error);
+  private async pollFlag(): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < 3000) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      try {
+        const val = await this.webview.executeJavaScript('window.__newTweetsAppeared');
+        if (val) return true;
+      } catch {
+        return false; // webview destroyed or navigated — treat as no new tweets
       }
-    } catch (err) {
-      console.error('Script execution error:', err);
-      new Notice('Failed to execute scraping script.');
+    }
+    return false;
+  }
+
+  private async cleanup() {
+    try {
+      await this.webview.executeJavaScript(`
+        if (window.__xbsObserver) {
+          window.__xbsObserver.disconnect();
+          window.__xbsObserver = null;
+          window.__xbsObserverInstalled = false;
+        }
+      `);
+    } catch {
+      // webview may already be gone — silently ignore
     }
   }
+
+  async autoScrollAndExtract() {
+    if (!this.webview) return;
+    if (this.isScrolling) return;
+
+    try {
+      // Setup
+      this.isScrolling = true;
+      this.collectedBookmarks = new Map();
+      let noNewCount = 0;
+      let iterationCount = 0;
+
+      this.setScrollingToolbar(0);
+
+      // Reset observer flag — authoritative reset for this run
+      await this.webview.executeJavaScript('window.__newTweetsAppeared = false');
+
+      // Pre-loop capture: grab tweets already visible in viewport
+      const preResult = await this.webview.executeJavaScript(this.getExtractionScript());
+      if (preResult && preResult.success && preResult.data) {
+        for (const tweet of preResult.data) {
+          this.collectedBookmarks.set(tweet.id, tweet);
+        }
+      }
+
+      // Inject MutationObserver (guarded against double-injection)
+      await this.webview.executeJavaScript(`
+        if (!window.__xbsObserverInstalled) {
+          window.__xbsObserverInstalled = true;
+          const observer = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+              for (const node of m.addedNodes) {
+                if (node.nodeType === 1 &&
+                    (node.matches('article[data-testid="tweet"]') ||
+                     node.querySelector('article[data-testid="tweet"]'))) {
+                  window.__newTweetsAppeared = true;
+                }
+              }
+            }
+          });
+          observer.observe(document.body, { childList: true, subtree: true });
+          window.__xbsObserver = observer;
+        }
+      `);
+
+      // Scroll loop
+      while (true) {
+        let newThisIteration = 0;
+        iterationCount++;
+
+        // Check cancel
+        if (!this.isScrolling) {
+          await this.cleanup();
+          this.isScrolling = false;
+          this.updateToolbar();
+          return;
+        }
+
+        // Check navigation away
+        if (!this.currentUrl.includes('/bookmarks')) {
+          await this.cleanup();
+          this.isScrolling = false;
+          this.updateToolbar();
+          new Notice('Navigated away — bookmark capture cancelled.');
+          return;
+        }
+
+        // Reset flag before scroll so observer detects only new changes
+        await this.webview.executeJavaScript('window.__newTweetsAppeared = false');
+
+        // Scroll to bottom
+        await this.webview.executeJavaScript('window.scrollTo(0, document.body.scrollHeight)');
+
+        // Wait for new tweets or timeout (return value intentionally discarded)
+        await this.pollFlag();
+
+        // Capture current tweets, merge new ones
+        const result = await this.webview.executeJavaScript(this.getExtractionScript());
+        if (result && result.success && result.data) {
+          for (const tweet of result.data) {
+            if (!this.collectedBookmarks.has(tweet.id)) {
+              this.collectedBookmarks.set(tweet.id, tweet);
+              newThisIteration++;
+            }
+          }
+        }
+        // { success: false } treated as zero new tweets — noNewCount increments normally
+
+        // Update consecutive-zero counter
+        if (newThisIteration === 0) {
+          noNewCount++;
+        } else {
+          noNewCount = 0;
+        }
+
+        // Update live count in toolbar
+        this.setScrollingToolbar(this.collectedBookmarks.size);
+
+        // Exit conditions
+        if (noNewCount >= 2 || iterationCount >= 500) {
+          break;
+        }
+      }
+
+      // After loop
+      await this.cleanup();
+      this.isScrolling = false;
+      this.updateToolbar();
+
+      if (this.collectedBookmarks.size === 0) {
+        new Notice('No bookmarks found.');
+        return;
+      }
+
+      new BookmarkSelectionModal(
+        this.app,
+        this.plugin,
+        Array.from(this.collectedBookmarks.values())
+      ).open();
+
+    } catch (err) {
+      console.error('autoScrollAndExtract error:', err);
+      await this.cleanup();
+      this.isScrolling = false;
+      this.updateToolbar();
+      new Notice('Error during bookmark capture.');
+    }
+  }
+
 }
 
 export default class XBookmarksSync extends Plugin {
