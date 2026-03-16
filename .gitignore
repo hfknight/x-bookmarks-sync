@@ -7,3 +7,6 @@ coverage/
 *.log
 .env*
 src/pluginFiles.ts
+obsidian-plugin/main.js
+main.js
+*.code-workspace
