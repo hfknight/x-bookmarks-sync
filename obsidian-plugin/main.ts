@@ -120,6 +120,9 @@ class XBookmarksView extends ItemView {
   copyBtn: HTMLButtonElement;
   closeBtn: HTMLButtonElement;
   currentUrl: string = 'https://x.com/i/bookmarks';
+  hintSpan: HTMLElement;
+  isScrolling: boolean = false;
+  collectedBookmarks: Map<string, any> = new Map();
 
   constructor(leaf: WorkspaceLeaf, plugin: XBookmarksSync) {
     super(leaf);
@@ -150,10 +153,7 @@ class XBookmarksView extends ItemView {
     toolbar.style.borderBottom = '1px solid var(--background-modifier-border)';
     toolbar.style.backgroundColor = 'var(--background-secondary)';
 
-    toolbar.createEl('span', {
-      text: 'Scroll to load, then click ->',
-      cls: 'text-muted'
-    });
+    this.hintSpan = toolbar.createEl('span', { cls: 'text-muted' });
 
     const btnGroup = toolbar.createDiv();
     btnGroup.style.display = 'flex';
@@ -169,13 +169,6 @@ class XBookmarksView extends ItemView {
       text: 'Extract Bookmarks',
       cls: 'mod-cta'
     });
-    this.extractBtn.onclick = async () => {
-      if (this.currentUrl.includes('/bookmarks')) {
-        await this.extractBookmarks();
-      } else {
-        this.loadUrl('https://twitter.com/i/bookmarks');
-      }
-    };
 
     this.closeBtn = btnGroup.createEl('button', { text: 'Close' });
     this.closeBtn.onclick = () => {
@@ -211,14 +204,22 @@ class XBookmarksView extends ItemView {
     });
 
     webviewContainer.appendChild(this.webview);
+    this.updateToolbar();
   }
 
   updateToolbar() {
+    if (!this.hintSpan) return;  // guard against calls before onOpen() completes
+    if (this.isScrolling) return; // don't clobber scrolling state
+
     if (this.currentUrl.includes('/bookmarks')) {
+      this.hintSpan.setText('Click to auto-scroll and capture all bookmarks');
       this.extractBtn.innerText = 'Extract Bookmarks';
+      this.extractBtn.onclick = async () => { await this.autoScrollAndExtract(); };
       this.copyBtn.style.display = 'none';
     } else {
+      this.hintSpan.setText('');
       this.extractBtn.innerText = 'Back to Bookmarks';
+      this.extractBtn.onclick = () => { this.loadUrl('https://twitter.com/i/bookmarks'); };
       this.copyBtn.style.display = 'block';
     }
   }
@@ -262,47 +263,51 @@ class XBookmarksView extends ItemView {
     this.updateToolbar();
   }
 
+  private getExtractionScript(): string {
+    return `
+      (function() {
+          try {
+              const tweets = document.querySelectorAll('article[data-testid="tweet"]');
+              const results = [];
+              tweets.forEach(tweet => {
+                  try {
+                      const textEl = tweet.querySelector('[data-testid="tweetText"]');
+                      const text = textEl ? textEl.innerText : '';
+
+                      const userEl = tweet.querySelector('[data-testid="User-Name"]');
+                      const userText = userEl ? userEl.innerText : '';
+                      const userParts = userText.split('\\n');
+                      const name = userParts[0] || 'Unknown';
+                      const username = userParts[1] || 'unknown';
+
+                      const linkEl = Array.from(tweet.querySelectorAll('a')).find(a => {
+                          const href = typeof a.href === 'string' ? a.href : (a.getAttribute ? a.getAttribute('href') : '');
+                          return href && href.includes('/status/');
+                      });
+                      const url = linkEl ? (typeof linkEl.href === 'string' ? linkEl.href : linkEl.getAttribute('href')) : '';
+                      const idMatch = url ? url.match(/status\\/(\\d+)/) : null;
+                      const id = idMatch ? idMatch[1] : Date.now().toString() + Math.random().toString().slice(2,5);
+
+                      if (text || url) {
+                          results.push({ id: String(id), name: String(name), username: String(username), text: String(text), url: String(url) });
+                      }
+                  } catch (e) {
+                      // ignore individual tweet errors
+                  }
+              });
+              return { success: true, data: results };
+          } catch (e) {
+              return { success: false, error: e.toString() };
+          }
+      })();
+    `;
+  }
+
   async extractBookmarks() {
     if (!this.webview) return;
     new Notice('Extracting bookmarks from current view...');
 
-    const script = `
-            (function() {
-                try {
-                    const tweets = document.querySelectorAll('article[data-testid="tweet"]');
-                    const results = [];
-                    tweets.forEach(tweet => {
-                        try {
-                            const textEl = tweet.querySelector('[data-testid="tweetText"]');
-                            const text = textEl ? textEl.innerText : '';
-
-                            const userEl = tweet.querySelector('[data-testid="User-Name"]');
-                            const userText = userEl ? userEl.innerText : '';
-                            const userParts = userText.split('\\n');
-                            const name = userParts[0] || 'Unknown';
-                            const username = userParts[1] || 'unknown';
-
-                            const linkEl = Array.from(tweet.querySelectorAll('a')).find(a => {
-                                const href = typeof a.href === 'string' ? a.href : (a.getAttribute ? a.getAttribute('href') : '');
-                                return href && href.includes('/status/');
-                            });
-                            const url = linkEl ? (typeof linkEl.href === 'string' ? linkEl.href : linkEl.getAttribute('href')) : '';
-                            const idMatch = url ? url.match(/status\\/(\\d+)/) : null;
-                            const id = idMatch ? idMatch[1] : Date.now().toString() + Math.random().toString().slice(2,5);
-
-                            if (text || url) {
-                                results.push({ id: String(id), name: String(name), username: String(username), text: String(text), url: String(url) });
-                            }
-                        } catch (e) {
-                            // ignore individual tweet errors
-                        }
-                    });
-                    return { success: true, data: results };
-                } catch (e) {
-                    return { success: false, error: e.toString() };
-                }
-            })();
-        `;
+    const script = this.getExtractionScript();
 
     try {
       const result = await this.webview.executeJavaScript(script);
