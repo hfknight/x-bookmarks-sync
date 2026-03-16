@@ -120,7 +120,7 @@ class XBookmarksView extends ItemView {
   copyBtn: HTMLButtonElement;
   closeBtn: HTMLButtonElement;
   currentUrl: string = 'https://x.com/i/bookmarks';
-  hintSpan: HTMLElement;
+  hintSpan: HTMLElement | null = null;
   isScrolling: boolean = false;
   collectedBookmarks: Map<string, any> = new Map();
 
