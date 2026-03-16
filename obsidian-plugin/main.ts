@@ -204,6 +204,94 @@ class XBookmarksView extends ItemView {
                 div[data-testid="sidebarColumn"] { display: none !important; }
                 main[role="main"] { align-items: center !important; }
             `);
+      // Install network interceptors early — dom-ready fires before X's React bundle runs,
+      // so our patches are in place before X stores any method references.
+      // Intercept both fetch and XHR since it's unclear which X uses.
+      this.webview.executeJavaScript(`
+        if (!window.__xbsIntercepted) {
+          window.__xbsIntercepted = true;
+          window.__xbsApiCollected = {};
+
+          function __xbsFindTweets(obj, depth) {
+            if (!obj || typeof obj !== 'object' || depth > 15) return;
+            // Detect a tweet result: has core.user_results and either legacy.id_str or rest_id
+            if (obj.core && obj.core.user_results && (obj.rest_id || (obj.legacy && obj.legacy.id_str))) {
+              try {
+                var userResult = obj.core.user_results.result;
+                if (userResult) {
+                  // X moved screen_name/name from legacy to core in newer API responses
+                  var screenName = (userResult.core && userResult.core.screen_name) || (userResult.legacy && userResult.legacy.screen_name);
+                  var name = (userResult.core && userResult.core.name) || (userResult.legacy && userResult.legacy.name);
+                  if (screenName) {
+                    var id = String((obj.legacy && obj.legacy.id_str) || obj.rest_id);
+                    var text = String((obj.legacy && (obj.legacy.full_text || obj.legacy.text)) || '');
+                    var url = 'https://x.com/' + screenName + '/status/' + id;
+                    window.__xbsApiCollected[id] = { id: id, name: String(name || screenName), username: '@' + screenName, text: text, url: url };
+                  }
+                }
+              } catch(e) {}
+            }
+            var items = Array.isArray(obj) ? obj : Object.values(obj);
+            for (var i = 0; i < items.length; i++) {
+              if (items[i] && typeof items[i] === 'object') __xbsFindTweets(items[i], depth + 1);
+            }
+          }
+
+          // XHR interceptor
+          var __xbsOrigOpen = XMLHttpRequest.prototype.open;
+          XMLHttpRequest.prototype.open = function(method, url) {
+            this.__xbsUrl = typeof url === 'string' ? url : '';
+            return __xbsOrigOpen.apply(this, arguments);
+          };
+
+          var __xbsOrigSend = XMLHttpRequest.prototype.send;
+          XMLHttpRequest.prototype.send = function() {
+            if (this.__xbsUrl && this.__xbsUrl.indexOf('/api/graphql/') !== -1) {
+              var xhrSelf = this;
+              xhrSelf.addEventListener('load', function() {
+                try {
+                  // X may set responseType='json', making responseText throw.
+                  // Try response (already parsed) first, fall back to responseText.
+                  var data;
+                  if (xhrSelf.responseType === 'json' || (xhrSelf.responseType === '' && typeof xhrSelf.response === 'object' && xhrSelf.response !== null)) {
+                    data = xhrSelf.response;
+                  } else {
+                    data = JSON.parse(xhrSelf.responseText);
+                  }
+                  if (data) {
+                    var before = Object.keys(window.__xbsApiCollected).length;
+                    __xbsFindTweets(data, 0);
+                    if (Object.keys(window.__xbsApiCollected).length > before) window.__newTweetsAppeared = true;
+                  }
+                } catch(e) {}
+              });
+            }
+            return __xbsOrigSend.apply(this, arguments);
+          };
+
+          // fetch interceptor
+          var __xbsOrigFetch = window.fetch;
+          window.fetch = function(input, init) {
+            var url = typeof input === 'string' ? input : (input && input.url) ? input.url : String(input);
+            var p = __xbsOrigFetch.apply(this, arguments);
+            if (url.indexOf('/api/graphql/') !== -1) {
+              p = p.then(function(resp) {
+                var clone = resp.clone();
+                clone.text().then(function(text) {
+                  try {
+                    var data = JSON.parse(text);
+                    __xbsFindTweets(data, 0);
+                    window.__newTweetsAppeared = true;
+                  } catch(e) {}
+                }).catch(function(){});
+                return resp;
+              });
+            }
+            return p;
+          };
+        }
+        void 0;
+      `).catch(() => {});
     });
 
     webviewContainer.appendChild(this.webview);
@@ -272,7 +360,8 @@ class XBookmarksView extends ItemView {
           try {
               const tweets = document.querySelectorAll('article[data-testid="tweet"]');
               const results = [];
-              tweets.forEach(tweet => {
+              const skipped = [];
+              tweets.forEach((tweet, idx) => {
                   try {
                       const textEl = tweet.querySelector('[data-testid="tweetText"]');
                       const text = textEl ? textEl.innerText : '';
@@ -293,12 +382,14 @@ class XBookmarksView extends ItemView {
 
                       if (text || url) {
                           results.push({ id: String(id), name: String(name), username: String(username), text: String(text), url: String(url) });
+                      } else {
+                          skipped.push({ domIndex: idx, hasText: !!text, hasUrl: !!url, hasUserName: !!userEl, outerHTML: tweet.outerHTML.substring(0, 300) });
                       }
                   } catch (e) {
-                      // ignore individual tweet errors
+                      skipped.push({ domIndex: idx, error: e.toString() });
                   }
               });
-              return { success: true, data: results };
+              return { success: true, data: results, totalArticles: tweets.length, skipped };
           } catch (e) {
               return { success: false, error: e.toString() };
           }
@@ -335,6 +426,7 @@ class XBookmarksView extends ItemView {
           window.__xbsObserver = null;
           window.__xbsObserverInstalled = false;
         }
+        window.__xbsCollected = {};
       `);
     } catch {
       // webview may already be gone — silently ignore
@@ -355,28 +447,63 @@ class XBookmarksView extends ItemView {
 
       this.setScrollingToolbar(0);
 
-      // Reset observer flag — authoritative reset for this run
-      await this.webview.executeJavaScript('window.__newTweetsAppeared = false');
+      // Navigate fresh to the bookmarks page so X starts a new API pagination
+      // cursor from page 1. Reusing the existing page state causes X to serve
+      // from its client-side cache which may have missed some bookmark pages.
+      this.webview.setAttribute('src', 'https://x.com/i/bookmarks');
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Pre-loop capture: grab tweets already visible in viewport
-      const preResult = await this.webview.executeJavaScript(this.getExtractionScript());
-      if (preResult && preResult.success && preResult.data) {
-        for (const tweet of preResult.data) {
-          this.collectedBookmarks.set(tweet.id, tweet);
-        }
-      }
+      // Reset observer state — authoritative reset for this run
+      await this.webview.executeJavaScript('window.__newTweetsAppeared = false; window.__xbsCollected = {}; window.__xbsObserverInstalled = false;');
 
-      // Inject MutationObserver (guarded against double-injection)
+      // Install observer FIRST so tweets added during page stabilization are captured
       await this.webview.executeJavaScript(`
         if (!window.__xbsObserverInstalled) {
           window.__xbsObserverInstalled = true;
+          window.__xbsCollected = window.__xbsCollected || {};
+
+          function __xbsExtractTweet(tweetEl) {
+            try {
+              const textEl = tweetEl.querySelector('[data-testid="tweetText"]');
+              const text = textEl ? textEl.innerText : '';
+
+              const userEl = tweetEl.querySelector('[data-testid="User-Name"]');
+              const userText = userEl ? userEl.innerText : '';
+              const userParts = userText.split('\\n');
+              const name = userParts[0] || 'Unknown';
+              const username = userParts[1] || 'unknown';
+
+              const linkEl = Array.from(tweetEl.querySelectorAll('a')).find(a => {
+                const href = typeof a.href === 'string' ? a.href : (a.getAttribute ? a.getAttribute('href') : '');
+                return href && href.includes('/status/');
+              });
+              const url = linkEl ? (typeof linkEl.href === 'string' ? linkEl.href : linkEl.getAttribute('href')) : '';
+              const idMatch = url ? url.match(/status\\/(\\d+)/) : null;
+              const id = idMatch ? idMatch[1] : null;
+
+              if (id && (text || url)) {
+                window.__xbsCollected[id] = {
+                  id: String(id), name: String(name),
+                  username: String(username), text: String(text), url: String(url)
+                };
+              }
+            } catch(e) {}
+          }
+
           const observer = new MutationObserver((mutations) => {
             for (const m of mutations) {
               for (const node of m.addedNodes) {
-                if (node.nodeType === 1 &&
-                    (node.matches('article[data-testid="tweet"]') ||
-                     node.querySelector('article[data-testid="tweet"]'))) {
-                  window.__newTweetsAppeared = true;
+                if (node.nodeType === 1) {
+                  if (node.matches && node.matches('article[data-testid="tweet"]')) {
+                    __xbsExtractTweet(node);
+                    window.__newTweetsAppeared = true;
+                  } else if (node.querySelectorAll) {
+                    const tweets = node.querySelectorAll('article[data-testid="tweet"]');
+                    if (tweets.length > 0) {
+                      tweets.forEach(t => __xbsExtractTweet(t));
+                      window.__newTweetsAppeared = true;
+                    }
+                  }
                 }
               }
             }
@@ -384,7 +511,41 @@ class XBookmarksView extends ItemView {
           observer.observe(document.body, { childList: true, subtree: true });
           window.__xbsObserver = observer;
         }
+
+        void 0; // ensure executeJavaScript returns undefined, not a function (functions can't be cloned by Electron IPC)
       `);
+
+      // Wait for X's initial render to stabilize before pre-loop.
+      // The initial DOM count varies (6 vs 8 across runs) because X finishes
+      // rendering asynchronously. Poll until the article count is stable for 500ms.
+      {
+        let prevCount = -1;
+        let stableMs = 0;
+        const deadline = Date.now() + 20000;
+        while (stableMs < 500 && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          try {
+            const count: number = await this.webview.executeJavaScript(
+              `document.querySelectorAll('article[data-testid="tweet"]').length`
+            );
+            if (count === prevCount) {
+              stableMs += 200;
+            } else {
+              prevCount = count;
+              stableMs = 0;
+            }
+          } catch { break; }
+        }
+      }
+
+      // Pre-loop capture: grab tweets already in the stable initial DOM.
+      // Observer is already running so anything added during/after this is also caught.
+      const preResult = await this.webview.executeJavaScript(this.getExtractionScript());
+      if (preResult && preResult.success && preResult.data) {
+        for (const tweet of preResult.data) {
+          this.collectedBookmarks.set(tweet.id, tweet);
+        }
+      }
 
       // Scroll loop
       while (true) {
@@ -412,13 +573,60 @@ class XBookmarksView extends ItemView {
         // Reset flag before scroll so observer detects only new changes
         await this.webview.executeJavaScript('window.__newTweetsAppeared = false');
 
-        // Scroll to bottom
-        await this.webview.executeJavaScript('window.scrollTo(0, document.body.scrollHeight)');
+        // Scroll to bottom — use max of body/documentElement heights since X may
+        // attach scroll listeners to either, and also scroll the largest overflow container
+        await this.webview.executeJavaScript(`
+          (function() {
+            window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+            // Also scroll any tall overflow container (X's timeline may live in one)
+            let best = null, bestH = 0;
+            document.querySelectorAll('div').forEach(function(el) {
+              if (el.scrollHeight > el.clientHeight + 200) {
+                var s = getComputedStyle(el);
+                if (s.overflowY === 'scroll' || s.overflowY === 'auto') {
+                  if (el.scrollHeight > bestH) { best = el; bestH = el.scrollHeight; }
+                }
+              }
+            });
+            if (best) best.scrollTop = best.scrollHeight;
+          })()
+        `);
 
-        // Wait for new tweets or timeout (return value intentionally discarded)
+        // Wait for new tweets or timeout, then an extra settling delay so the
+        // full batch (not just the first tweet) finishes rendering before we extract
         await this.pollFlag();
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Capture current tweets, merge new ones
+        // Primary: merge tweets captured by the observer the instant they entered the DOM
+        // (immune to virtual-list unmounting that can happen before DOM extraction runs)
+        const observerResult = await this.webview.executeJavaScript(
+          '(function(){ return { success: true, data: Object.values(window.__xbsCollected || {}) }; })()'
+        );
+        if (observerResult && observerResult.success && observerResult.data) {
+          for (const tweet of observerResult.data) {
+            if (!this.collectedBookmarks.has(tweet.id)) {
+              this.collectedBookmarks.set(tweet.id, tweet);
+              newThisIteration++;
+            }
+          }
+        }
+
+        // API intercept: merge tweets captured directly from X's GraphQL responses.
+        // These arrive before DOM rendering and are immune to virtual-list truncation.
+        // JSON.stringify in the webview avoids Electron structured-clone failures.
+        const apiJson = await this.webview.executeJavaScript(
+          '(function(){ try { return JSON.stringify(Object.values(window.__xbsApiCollected || {})); } catch(e) { return "[]"; } })()'
+        );
+        const apiResult: any[] = apiJson ? JSON.parse(apiJson) : [];
+        for (const tweet of apiResult) {
+          if (!this.collectedBookmarks.has(tweet.id)) {
+            this.collectedBookmarks.set(tweet.id, tweet);
+            newThisIteration++;
+          }
+        }
+
+        // Fallback: DOM extraction catches tweets without a /status/ URL (no stable id)
+        // and any that the observer may have missed
         const result = await this.webview.executeJavaScript(this.getExtractionScript());
         if (result && result.success && result.data) {
           for (const tweet of result.data) {
@@ -440,11 +648,33 @@ class XBookmarksView extends ItemView {
         // Update live count in toolbar
         this.setScrollingToolbar(this.collectedBookmarks.size);
 
-        // Exit conditions
-        if (noNewCount >= 2 || iterationCount >= 500) {
+        if (noNewCount >= 5 || iterationCount >= 500) {
           break;
         }
       }
+
+      // Final merge: flush anything the observer or API interceptor collected during
+      // the last zero-new-content iterations that was never picked up in the loop
+      try {
+        let finalNew = 0;
+        const finalJson = await this.webview.executeJavaScript(`(function(){
+          try {
+            return JSON.stringify({
+              observer: Object.values(window.__xbsCollected || {}),
+              api: Object.values(window.__xbsApiCollected || {})
+            });
+          } catch(e) { return '{"observer":[],"api":[]}'; }
+        })()`);
+        const finalSources = finalJson ? JSON.parse(finalJson) : { observer: [], api: [] };
+        if (finalSources) {
+          for (const tweet of [...(finalSources.observer || []), ...(finalSources.api || [])]) {
+            if (!this.collectedBookmarks.has(tweet.id)) {
+              this.collectedBookmarks.set(tweet.id, tweet);
+              finalNew++;
+            }
+          }
+        }
+      } catch { /* webview may be gone */ }
 
       // After loop
       await this.cleanup();
@@ -537,7 +767,7 @@ export default class XBookmarksSync extends Plugin {
     const month = String(tweetDate.getMonth() + 1).padStart(2, '0');
     const day = String(tweetDate.getDate()).padStart(2, '0');
     const year = tweetDate.getFullYear();
-    const date = `${month}-${day}-${year}`;
+    const date = `${year}-${month}-${day}`;
 
     const author = (tweet.name || 'Unknown')
       .replace(/[\\/:"*?<>|]/g, '')
