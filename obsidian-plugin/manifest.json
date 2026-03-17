@@ -3,7 +3,7 @@
   "name": "X Bookmarks Sync",
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
-  "description": "Sync your X (Twitter) bookmarks to Obsidian.",
+  "description": "Save your X (Twitter) bookmarks as structured Markdown notes, with selective import, incremental sync, and no API key needed.",
   "author": "Fei Hu",
   "authorUrl": "https://github.com/hfknight",
   "isDesktopOnly": true
