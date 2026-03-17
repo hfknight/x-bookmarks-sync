@@ -23,11 +23,11 @@ export default class XBookmarksSync extends Plugin {
     };
     this.importedIds = new Set(this.settings.importedIds);
 
-    addIcon('x-brand', `<g transform="scale(4.1667)"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></g>`);
+    addIcon('x-bookmarks-sync', `<path d="M 50 16.67 A 33.33 33.33 0 0 1 73.75 73.75 M 73.75 52.92 V 73.75 H 94.58" stroke="currentColor" stroke-width="8.33" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M 50 83.33 A 33.33 33.33 0 0 1 26.25 26.25 M 26.25 47.08 V 26.25 H 5.42" stroke="currentColor" stroke-width="8.33" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M 60.42 33.75 H 65.83 L 53.75 47.5 L 67.92 66.25 H 57.08 L 48.75 55 L 38.33 66.25 H 32.92 L 45.42 51.67 L 32.08 33.75 H 42.92 L 50.42 44.17 Z" fill="currentColor" stroke="none"/>`);
 
     this.registerView(VIEW_TYPE, (leaf) => new XBookmarksView(leaf, this));
 
-    this.addRibbonIcon('x-brand', 'Open X Bookmarks', () => {
+    this.addRibbonIcon('x-bookmarks-sync', 'Open X Bookmarks', () => {
       this.activateView();
     });
 
