@@ -911,6 +911,21 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Last sync')
       .setDesc(lastSync);
+
+    const count = this.plugin.importedIds.size;
+    new Setting(containerEl)
+      .setName('Import history')
+      .setDesc(`${count} bookmark${count !== 1 ? 's' : ''} tracked. Clear this to re-import previously synced bookmarks.`)
+      .addButton(btn => {
+        btn.setButtonText('Clear import history')
+          .setWarning()
+          .onClick(async () => {
+            this.plugin.importedIds.clear();
+            this.plugin.settings.lastSyncAt = null;
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      });
   }
 }
 
