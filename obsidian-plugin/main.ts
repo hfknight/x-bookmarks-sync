@@ -467,6 +467,7 @@ class XBookmarksView extends ItemView {
       this.collectedBookmarks = new Map();
       let noNewCount = 0;
       let iterationCount = 0;
+      const incrementalMode = this.incrementalMode;
 
       this.setScrollingToolbar(0);
 
@@ -570,6 +571,10 @@ class XBookmarksView extends ItemView {
         }
       }
 
+      // allImportedCount: consecutive scroll iterations where all DOM-visible tweets are already imported.
+      // Only used in incremental mode. Pre-loop capture excluded (it's not a scroll result).
+      let allImportedCount = 0;
+
       // Scroll loop
       while (true) {
         let newThisIteration = 0;
@@ -660,6 +665,23 @@ class XBookmarksView extends ItemView {
           }
         }
         // { success: false } treated as zero new tweets — noNewCount increments normally
+
+        // Incremental stop: check if all DOM-visible tweets are already imported.
+        // Uses DOM extraction (point-in-time) — not the cumulative observer/API sets.
+        // Empty or failed DOM result is inconclusive — allImportedCount is left unchanged (not reset).
+        if (incrementalMode && result && result.success && result.data && result.data.length > 0) {
+          const allAlreadyImported = (result.data as any[]).every(
+            (t) => this.plugin.importedIds.has(t.id)
+          );
+          if (allAlreadyImported) {
+            allImportedCount++;
+          } else {
+            allImportedCount = 0;
+          }
+          if (allImportedCount >= 3) {
+            break; // waterline reached — stop scrolling
+          }
+        }
 
         // Update consecutive-zero counter
         if (newThisIteration === 0) {
