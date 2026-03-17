@@ -7,6 +7,7 @@ class BookmarkSelectionModal extends Modal {
   bookmarks: any[];
   plugin: XBookmarksSync;
   selectedIds: Set<string>;
+  onImportComplete?: () => void;
 
   constructor(app: App, plugin: XBookmarksSync, bookmarks: any[]) {
     super(app);
@@ -101,6 +102,7 @@ class BookmarkSelectionModal extends Modal {
       this.close();
       if (toImport.length > 0) {
         await this.plugin.saveBookmarksToVault(toImport);
+        this.onImportComplete?.();
       } else {
         new Notice('No bookmarks selected for import.');
       }
@@ -149,8 +151,11 @@ class XBookmarksView extends ItemView {
     this.cancelRequested = false;
     // If opened via protocol handler with a specific URL, use it as the initial URL
     // so the webview never loads the bookmarks page first (avoids a navigation race).
+    // Clear pendingOpenUrl here (after consuming) rather than in the caller, so there's
+    // no race if Obsidian defers onOpen() past the activateView() await.
     if (this.plugin.pendingOpenUrl) {
       this.currentUrl = this.plugin.pendingOpenUrl;
+      this.plugin.pendingOpenUrl = null;
     }
     const container = this.containerEl.children[1];
     container.empty();
@@ -734,9 +739,6 @@ class XBookmarksView extends ItemView {
       // After loop
       await this.cleanup();
       this.isScrolling = false;
-      // Reset to incremental mode after any completed extraction (cancel paths exit early via return)
-      this.incrementalMode = true;
-      if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = true;
       this.updateToolbar();
 
       if (this.collectedBookmarks.size === 0) {
@@ -744,11 +746,18 @@ class XBookmarksView extends ItemView {
         return;
       }
 
-      new BookmarkSelectionModal(
+      const modal = new BookmarkSelectionModal(
         this.app,
         this.plugin,
         Array.from(this.collectedBookmarks.values())
-      ).open();
+      );
+      // Reset to incremental mode only after the user actually confirms import,
+      // not on extraction completion — avoids flipping the checkbox if the modal is cancelled.
+      modal.onImportComplete = () => {
+        this.incrementalMode = true;
+        if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = true;
+      };
+      modal.open();
 
     } catch (err) {
       console.error('autoScrollAndExtract error:', err);
