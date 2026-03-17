@@ -8,6 +8,7 @@ class BookmarkSelectionModal extends Modal {
   plugin: XBookmarksSync;
   selectedIds: Set<string>;
   onImportComplete?: () => void;
+  onDidClose?: () => void;
 
   constructor(app: App, plugin: XBookmarksSync, bookmarks: any[]) {
     super(app);
@@ -112,6 +113,7 @@ class BookmarkSelectionModal extends Modal {
   onClose() {
     const { contentEl } = this;
     contentEl.empty();
+    this.onDidClose?.();
   }
 }
 
@@ -746,6 +748,11 @@ class XBookmarksView extends ItemView {
         return;
       }
 
+      const count = this.collectedBookmarks.size;
+      if (this.hintSpan) {
+        this.hintSpan.setText(`Preparing ${count} bookmark${count !== 1 ? 's' : ''}…`);
+      }
+
       const modal = new BookmarkSelectionModal(
         this.app,
         this.plugin,
@@ -757,6 +764,7 @@ class XBookmarksView extends ItemView {
         this.incrementalMode = true;
         if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = true;
       };
+      modal.onDidClose = () => { this.updateToolbar(); };
       modal.open();
 
     } catch (err) {
