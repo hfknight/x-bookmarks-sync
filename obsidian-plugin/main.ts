@@ -147,6 +147,11 @@ class XBookmarksView extends ItemView {
   async onOpen() {
     this.isScrolling = false;
     this.cancelRequested = false;
+    // If opened via protocol handler with a specific URL, use it as the initial URL
+    // so the webview never loads the bookmarks page first (avoids a navigation race).
+    if (this.plugin.pendingOpenUrl) {
+      this.currentUrl = this.plugin.pendingOpenUrl;
+    }
     const container = this.containerEl.children[1];
     container.empty();
 
@@ -329,14 +334,14 @@ class XBookmarksView extends ItemView {
         ? 'Will stop when reaching already-imported bookmarks'
         : 'Will scroll through all bookmarks';
       this.hintSpan.setText(hint);
+      this.extractBtn.style.display = '';
       this.extractBtn.innerText = 'Extract Bookmarks';
       this.extractBtn.onclick = async () => { await this.autoScrollAndExtract(); };
       this.copyBtn.style.display = 'none';
       if (this.syncFromLastLabel) this.syncFromLastLabel.style.display = 'flex';
     } else {
       this.hintSpan.setText('');
-      this.extractBtn.innerText = 'Back to Bookmarks';
-      this.extractBtn.onclick = () => { this.loadUrl('https://twitter.com/i/bookmarks'); };
+      this.extractBtn.style.display = 'none';
       this.copyBtn.style.display = 'block';
       if (this.syncFromLastLabel) this.syncFromLastLabel.style.display = 'none';
     }
@@ -759,6 +764,7 @@ class XBookmarksView extends ItemView {
 
 export default class XBookmarksSync extends Plugin {
   importedIds: Set<string> = new Set();
+  pendingOpenUrl: string | null = null;
 
   async onload() {
     const data = await this.loadData();
@@ -794,11 +800,16 @@ export default class XBookmarksSync extends Plugin {
   }
 
   async openUrlInWebview(url: string) {
-    await this.activateView();
-    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
-    if (leaves.length > 0) {
-      const view = leaves[0].view as XBookmarksView;
-      view.loadUrl(url);
+    const existingLeaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
+    if (existingLeaves.length > 0) {
+      // View already open — navigate directly, no race possible
+      await this.activateView();
+      (existingLeaves[0].view as XBookmarksView).loadUrl(url);
+    } else {
+      // View not open — set pendingOpenUrl so onOpen() initializes to the right URL
+      this.pendingOpenUrl = url;
+      await this.activateView();
+      this.pendingOpenUrl = null;
     }
   }
 
