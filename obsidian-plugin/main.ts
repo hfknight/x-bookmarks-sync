@@ -171,6 +171,20 @@ class XBookmarksView extends ItemView {
       await this.copyAsMarkdown();
     };
 
+    this.syncFromLastLabel = btnGroup.createEl('label');
+    this.syncFromLastLabel.style.display = 'flex';
+    this.syncFromLastLabel.style.alignItems = 'center';
+    this.syncFromLastLabel.style.gap = '4px';
+    this.syncFromLastLabel.style.fontSize = '0.9em';
+    this.syncFromLastLabel.style.cursor = 'pointer';
+    this.syncFromLastCheckbox = this.syncFromLastLabel.createEl('input', { type: 'checkbox' });
+    this.syncFromLastCheckbox.checked = true;
+    this.syncFromLastCheckbox.onchange = () => {
+      this.incrementalMode = this.syncFromLastCheckbox!.checked;
+      this.updateToolbar();
+    };
+    this.syncFromLastLabel.createSpan({ text: 'Sync from last' });
+
     this.extractBtn = btnGroup.createEl('button', {
       text: 'Extract Bookmarks',
       cls: 'mod-cta'
