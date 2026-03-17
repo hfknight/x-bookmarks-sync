@@ -66,7 +66,7 @@ export class BookmarkSelectionModal extends Modal {
 
       const textDiv = itemDiv.createDiv();
       const title = bookmark.text
-        ? bookmark.text.substring(0, 80) + '...'
+        ? (bookmark.text.length > 80 ? bookmark.text.substring(0, 80) + '...' : bookmark.text)
         : 'No text';
       textDiv.createEl('strong', {
         text: `${bookmark.name} (${bookmark.username})`

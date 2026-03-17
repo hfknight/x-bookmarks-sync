@@ -113,17 +113,17 @@ Each saved bookmark becomes a Markdown file with this structure:
 ---
 id: "1234567890"
 author: "Display Name"
-username: "handle"
+username: "@handle"
 scraped_date: 2024-01-15
-url: "https://twitter.com/handle/status/1234567890"
+url: "https://x.com/handle/status/1234567890"
 tags: [twitter, bookmark]
 ---
 
-# Tweet by Display Name (handle)
+# Tweet by Display Name (@handle)
 
 The full text of the tweet goes here...
 
-[View on X](https://twitter.com/...) | [Open in Obsidian Webview](obsidian://x-bookmarks?url=...)
+[View on X](https://x.com/...) | [Open in Obsidian Webview](obsidian://x-bookmarks?url=...)
 ```
 
 **File naming:** `{folder}/{YYYY-MM-DD}-{author}-{first 40 chars of tweet}.md`

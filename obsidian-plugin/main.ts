@@ -1,4 +1,4 @@
-import { Plugin, addIcon, Notice } from 'obsidian';
+import { Plugin, addIcon, Notice, TFolder } from 'obsidian';
 import { VIEW_TYPE, XBookmarksSyncData } from './types';
 import { XBookmarksView } from './view';
 import { XBookmarksSyncSettingTab } from './settings-tab';
@@ -73,7 +73,6 @@ export default class XBookmarksSync extends Plugin {
       // View not open — set pendingOpenUrl so onOpen() initializes to the right URL
       this.pendingOpenUrl = url;
       await this.activateView();
-      this.pendingOpenUrl = null;
     }
   }
 
@@ -127,8 +126,8 @@ export default class XBookmarksSync extends Plugin {
 
   async saveBookmarksToVault(bookmarks: any[]) {
     const targetFolder = this.settings.defaultFolder;
-    let folder = this.app.vault.getAbstractFileByPath(targetFolder);
-    if (!folder) {
+    const folder = this.app.vault.getAbstractFileByPath(targetFolder);
+    if (!(folder instanceof TFolder)) {
       await this.app.vault.createFolder(targetFolder);
     }
 
