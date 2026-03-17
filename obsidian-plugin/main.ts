@@ -320,15 +320,20 @@ class XBookmarksView extends ItemView {
     if (this.isScrolling) return; // don't clobber scrolling state
 
     if (this.currentUrl.includes('/bookmarks')) {
-      this.hintSpan.setText('Click to auto-scroll and capture all bookmarks');
+      const hint = this.incrementalMode
+        ? 'Will stop when reaching already-imported bookmarks'
+        : 'Will scroll through all bookmarks';
+      this.hintSpan.setText(hint);
       this.extractBtn.innerText = 'Extract Bookmarks';
       this.extractBtn.onclick = async () => { await this.autoScrollAndExtract(); };
       this.copyBtn.style.display = 'none';
+      if (this.syncFromLastLabel) this.syncFromLastLabel.style.display = 'flex';
     } else {
       this.hintSpan.setText('');
       this.extractBtn.innerText = 'Back to Bookmarks';
       this.extractBtn.onclick = () => { this.loadUrl('https://twitter.com/i/bookmarks'); };
       this.copyBtn.style.display = 'block';
+      if (this.syncFromLastLabel) this.syncFromLastLabel.style.display = 'none';
     }
   }
 
@@ -419,6 +424,7 @@ class XBookmarksView extends ItemView {
     this.hintSpan.setText(`Loading bookmarks... ${count} found`);
     this.extractBtn.innerText = 'Cancel';
     this.extractBtn.onclick = () => { this.cancelRequested = true; };
+    if (this.syncFromLastLabel) this.syncFromLastLabel.style.display = 'none';
   }
 
   private async pollFlag(): Promise<boolean> {
