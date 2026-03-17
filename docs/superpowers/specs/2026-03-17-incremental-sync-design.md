@@ -21,37 +21,58 @@ X displays bookmarks in reverse-chronological order of **when you bookmarked the
 
 ### UI: "Sync from last" Checkbox
 
-Add a checkbox labeled **"Sync from last"** to the toolbar, left of the Extract button.
+Add a checkbox labeled **"Sync from last"** to the toolbar, placed inside the button group, left of the Extract button (i.e., between `copyBtn` and `extractBtn` in the DOM order).
 
-- **Default state:** checked (incremental mode)
-- **Hint text (checked):** `"Will stop when reaching already-imported bookmarks"`
-- **Hint text (unchecked):** `"Will scroll through all bookmarks"`
-- **Auto-reset:** after a full sync completes, the checkbox resets to checked. Cancel does not reset it.
-- No persistence — this is session-only UI state.
+The `hintSpan` already shows contextual text and is updated by `updateToolbar()`. Extend `updateToolbar()` to reflect the checkbox state:
+
+- **Checked:** `"Will stop when reaching already-imported bookmarks"`
+- **Unchecked:** `"Will scroll through all bookmarks"`
+
+The checkbox is only visible when on the bookmarks URL (same condition as the Extract button). It is hidden when `isScrolling` is true (replaced by the Cancel button state).
+
+**Default state:** checked (incremental mode).
+
+**Auto-reset:** after any non-cancelled extraction completes (both incremental and full mode), the checkbox resets to checked. Cancel does not reset it.
+
+No persistence — this is session-only UI state. A class field `incrementalMode: boolean = true` on `XBookmarksView` holds the current value.
+
+---
 
 ### Scroll Loop: Incremental Stop Condition
 
 Add one counter to `autoScrollAndExtract`:
 
 ```
-allImportedCount: number  // consecutive scrolls where every tweet found was already in importedIds
+allImportedCount: number  // consecutive scrolls where all DOM-visible tweets are already in importedIds
 ```
 
-**Each iteration**, after merging tweets from all three capture paths (observer, API intercept, DOM fallback):
+**Source of truth for the incremental check: DOM extraction only.**
 
-1. Count how many tweets found this iteration are already in `importedIds`
-2. If **all** found tweets are already imported (and at least one was found): `allImportedCount++`
-3. Otherwise: `allImportedCount = 0`
-4. If `allImportedCount >= 3`: break the scroll loop early
+The observer (`window.__xbsCollected`) and API intercept (`window.__xbsApiCollected`) are cumulative session sets — they grow monotonically and cannot tell us what appeared in a specific scroll step. The DOM extraction (`getExtractionScript()`) is a point-in-time snapshot of whatever is currently visible in X's virtual list — exactly the right signal for "what did this scroll reveal?"
 
-This logic runs **only when "Sync from last" is checked**. In full sync mode, `allImportedCount` is ignored and the existing `noNewCount >= 5` stop condition is used unchanged.
+**Each iteration**, after the DOM extraction result is available (the existing `result` variable in the fallback path):
+
+1. If `result.success` and `result.data.length > 0`:
+   - Check if **every** tweet in `result.data` is already in `this.plugin.importedIds`
+   - If yes: `allImportedCount++`
+   - If no: `allImportedCount = 0`
+2. If `result.data.length === 0` (empty DOM): do not increment or reset `allImportedCount` (neutral — treat as inconclusive)
+3. If `allImportedCount >= 3` and `this.incrementalMode`: break the loop early
+
+**Pre-loop capture is excluded from this check.** The pre-loop DOM extraction runs before scrolling begins and reflects the initial page load; it is not a scroll-result and should not seed `allImportedCount`. Initialize `allImportedCount = 0` after the pre-loop capture.
+
+This logic runs **only when `this.incrementalMode` is true**. In full sync mode, `allImportedCount` is ignored and the existing `noNewCount >= 5` stop condition is used unchanged.
 
 ### Why 3 Consecutive Scrolls
 
 A threshold of 3 provides a comfortable buffer:
 - X's virtual list can unmount/remount tweets as you scroll, causing a scroll to temporarily yield no new content
-- 3 consecutive all-imported scrolls is robust against such transient gaps
+- 3 consecutive all-imported DOM snapshots is robust against such transient gaps
 - Still stops far earlier than scrolling hundreds of bookmarks
+
+### Note on `__newTweetsAppeared` Flag
+
+The fetch interceptor sets `window.__newTweetsAppeared = true` whenever any GraphQL response is received, even if no tweets were extracted. This means `pollFlag()` may return `true` on API responses that contain no bookmarks. The incremental stop condition operates on tweet IDs from `importedIds` — not on the `__newTweetsAppeared` flag — so this has no effect on correctness.
 
 ### What Stays the Same
 
@@ -60,31 +81,40 @@ A threshold of 3 provides a comfortable buffer:
 - All three capture paths (observer, API intercept, DOM fallback) — no change
 - `noNewCount >= 5` hard stop — still in place as final safety net for both modes
 
+---
+
 ## Data Flow
 
 ```
 autoScrollAndExtract()
-  ├── if "Sync from last" checked → incrementalMode = true
+  ├── incrementalMode = this.incrementalMode  (default: true)
+  ├── [pre-loop capture — excluded from allImportedCount]
   ├── allImportedCount = 0
   └── scroll loop:
-        ├── collect tweets (observer + API + DOM)
-        ├── merge into collectedBookmarks
-        ├── if incrementalMode:
-        │     count = tweets found this iteration that are in importedIds
-        │     if count == total found this iteration (and total > 0):
-        │       allImportedCount++
-        │     else:
-        │       allImportedCount = 0
-        │     if allImportedCount >= 3: break
-        └── existing noNewCount logic unchanged
+        ├── collect tweets (observer + API + DOM — unchanged)
+        ├── merge into collectedBookmarks (unchanged)
+        ├── run DOM extraction → result
+        ├── if incrementalMode and result.success and result.data.length > 0:
+        │     allInImported = result.data.every(t => importedIds.has(t.id))
+        │     if allInImported: allImportedCount++
+        │     else: allImportedCount = 0
+        │     if allImportedCount >= 3: break (early stop)
+        └── existing noNewCount logic unchanged (catches genuine end-of-feed)
+
+  after loop (non-cancel exit):
+        └── this.incrementalMode = true  (reset checkbox to checked)
 ```
+
+---
 
 ## Edge Cases
 
 | Scenario | Behaviour |
 |---|---|
-| First-ever sync (no importedIds) | `allImportedCount` never increments — scrolls to completion normally |
+| First-ever sync (no importedIds) | `allImportedCount` never reaches 3 — scrolls to completion normally |
 | User bookmarks an old tweet | Appears near top of feed (bookmarked recently) — captured before waterline |
-| User deleted a bookmark on X | Gap in known IDs — `allImportedCount` resets, continues scrolling |
-| User imported only some bookmarks from a prior session | Sparse `importedIds` — threshold of 3 prevents premature stop |
+| User deleted a bookmark on X | Gap in known IDs in the DOM window — `allImportedCount` resets, continues scrolling |
+| User imported only some bookmarks from a prior session | Sparse `importedIds` — DOM window will show a mix; `allImportedCount` resets on any unimported tweet |
 | Full sync selected | `allImportedCount` ignored entirely — existing behaviour unchanged |
+| Empty DOM snapshot mid-scroll | `allImportedCount` neither increments nor resets — treated as inconclusive |
+| Cancel mid-scroll | Loop exits via cancel path — `incrementalMode` not reset |
