@@ -9,7 +9,7 @@
     "build": "npm run build:plugin && vite build",
     "deploy:local": "npm run build:plugin && cp main.js manifest.json \"/Users/fei.hu/Dropbox/Obsidian Notes/.obsidian/plugins/x-bookmarks-sync/\"",
     "preview": "vite preview",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist-plugin",
     "lint": "tsc --noEmit && tsc --noEmit -p obsidian-plugin/tsconfig.json",
     "typecheck": "tsc --noEmit && tsc --noEmit -p obsidian-plugin/tsconfig.json"
   },
