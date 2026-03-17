@@ -790,6 +790,91 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
           }
           await this.plugin.saveSettings();
         }));
+
+    // Default Tags
+    const tagSetting = new Setting(containerEl)
+      .setName('Default tags')
+      .setDesc('Tags applied to every imported bookmark note.');
+
+    tagSetting.controlEl.empty();
+
+    const chipsContainer = tagSetting.controlEl.createDiv();
+    chipsContainer.style.display = 'flex';
+    chipsContainer.style.flexWrap = 'wrap';
+    chipsContainer.style.gap = '6px';
+    chipsContainer.style.alignItems = 'center';
+    chipsContainer.style.marginTop = '4px';
+
+    const renderChips = () => {
+      chipsContainer.empty();
+
+      for (const tag of this.plugin.settings.defaultTags) {
+        const chip = chipsContainer.createEl('span');
+        chip.style.display = 'inline-flex';
+        chip.style.alignItems = 'center';
+        chip.style.gap = '4px';
+        chip.style.padding = '2px 8px';
+        chip.style.borderRadius = '12px';
+        chip.style.border = '1px solid var(--background-modifier-border)';
+        chip.style.fontSize = '0.85em';
+        chip.style.backgroundColor = 'var(--background-secondary)';
+        chip.style.color = 'var(--text-normal)';
+        chip.createSpan({ text: tag });
+
+        const removeBtn = chip.createEl('button', { text: '×' });
+        removeBtn.style.background = 'none';
+        removeBtn.style.border = 'none';
+        removeBtn.style.cursor = 'pointer';
+        removeBtn.style.padding = '0';
+        removeBtn.style.lineHeight = '1';
+        removeBtn.style.color = 'var(--text-muted)';
+        removeBtn.onclick = async () => {
+          this.plugin.settings.defaultTags = this.plugin.settings.defaultTags.filter(t => t !== tag);
+          await this.plugin.saveSettings();
+          renderChips();
+        };
+
+        chipsContainer.appendChild(chip);
+      }
+
+      const inputRow = chipsContainer.createDiv();
+      inputRow.style.display = 'flex';
+      inputRow.style.alignItems = 'center';
+      inputRow.style.gap = '6px';
+      inputRow.style.marginTop = '6px';
+      inputRow.style.width = '100%';
+
+      const tagInput = inputRow.createEl('input', { type: 'text' });
+      tagInput.placeholder = 'Add tag\u2026';
+      tagInput.style.border = '1px solid var(--background-modifier-border)';
+      tagInput.style.borderRadius = '4px';
+      tagInput.style.padding = '2px 6px';
+      tagInput.style.fontSize = '0.85em';
+      tagInput.style.background = 'var(--background-primary)';
+      tagInput.style.color = 'var(--text-normal)';
+      tagInput.style.width = '120px';
+
+      const hint = inputRow.createEl('span', { text: 'Press Enter to add' });
+      hint.style.color = 'var(--text-muted)';
+      hint.style.fontSize = '0.8em';
+
+      tagInput.addEventListener('keydown', async (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const val = tagInput.value.trim().toLowerCase();
+        if (!val) return;
+        if (this.plugin.settings.defaultTags.includes(val)) {
+          tagInput.value = '';
+          return;
+        }
+        this.plugin.settings.defaultTags.push(val);
+        await this.plugin.saveSettings();
+        tagInput.value = '';
+        renderChips();
+      });
+    };
+
+    renderChips();
   }
 }
 
