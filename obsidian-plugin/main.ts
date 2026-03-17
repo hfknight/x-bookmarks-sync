@@ -774,7 +774,22 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl('h2', { text: 'X Bookmarks Sync' });
-    // settings will be added here
+    new Setting(containerEl)
+      .setName('Default folder')
+      .setDesc('Vault folder where bookmark notes are saved.')
+      .addText(text => text
+        .setPlaceholder('x-bookmarks')
+        .setValue(this.plugin.settings.defaultFolder)
+        .onChange(async (value) => {
+          const trimmed = value.trim().replace(/^\/+|\/+$/g, '');
+          if (!trimmed) {
+            this.plugin.settings.defaultFolder = 'x-bookmarks';
+            text.setValue('x-bookmarks');
+          } else {
+            this.plugin.settings.defaultFolder = trimmed;
+          }
+          await this.plugin.saveSettings();
+        }));
   }
 }
 
