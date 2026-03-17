@@ -816,6 +816,17 @@ export default class XBookmarksSync extends Plugin {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE);
   }
 
+  async saveSettings() {
+    try {
+      await this.saveData({
+        ...this.settings,
+        importedIds: Array.from(this.importedIds),
+      });
+    } catch (e) {
+      new Notice('X Bookmarks Sync: failed to save settings.');
+    }
+  }
+
   async openUrlInWebview(url: string) {
     const existingLeaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
     if (existingLeaves.length > 0) {
@@ -897,7 +908,7 @@ export default class XBookmarksSync extends Plugin {
       }
       this.importedIds.add(tweet.id);
     }
-    await this.saveData({ importedIds: Array.from(this.importedIds) });
+    await this.saveSettings();
     new Notice(`Successfully saved ${count} new bookmarks!`);
   }
 
