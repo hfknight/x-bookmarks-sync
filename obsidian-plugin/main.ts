@@ -762,8 +762,21 @@ class XBookmarksView extends ItemView {
 
 }
 
+interface XBookmarksSyncData {
+  importedIds: string[];
+  defaultFolder: string;
+  defaultTags: string[];
+  lastSyncAt: string | null;
+}
+
 export default class XBookmarksSync extends Plugin {
   importedIds: Set<string> = new Set();
+  settings: XBookmarksSyncData = {
+    importedIds: [],
+    defaultFolder: 'x-bookmarks',
+    defaultTags: ['twitter', 'bookmark'],
+    lastSyncAt: null,
+  };
   pendingOpenUrl: string | null = null;
 
   async onload() {
