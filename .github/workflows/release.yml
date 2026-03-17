@@ -8,6 +8,9 @@ on:
 env:
   PLUGIN_NAME: x-bookmarks-sync
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
