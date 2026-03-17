@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
   "description": "Sync your X (Twitter) bookmarks to Obsidian.",
-  "author": "Fei",
+  "author": "Fei Hu",
   "authorUrl": "https://github.com/hfknight",
   "isDesktopOnly": true
 }
