@@ -875,6 +875,14 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
     };
 
     renderChips();
+
+    const lastSync = this.plugin.settings.lastSyncAt
+      ? new Date(this.plugin.settings.lastSyncAt).toLocaleString()
+      : 'Never synced yet';
+
+    new Setting(containerEl)
+      .setName('Last sync')
+      .setDesc(lastSync);
   }
 }
 
