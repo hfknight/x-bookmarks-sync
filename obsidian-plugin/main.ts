@@ -724,6 +724,9 @@ class XBookmarksView extends ItemView {
       // After loop
       await this.cleanup();
       this.isScrolling = false;
+      // Reset to incremental mode after any completed extraction (cancel paths exit early via return)
+      this.incrementalMode = true;
+      if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = true;
       this.updateToolbar();
 
       if (this.collectedBookmarks.size === 0) {
