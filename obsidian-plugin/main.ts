@@ -833,8 +833,6 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
           renderChips();
         };
-
-        chipsContainer.appendChild(chip);
       }
 
       const inputRow = chipsContainer.createDiv();
