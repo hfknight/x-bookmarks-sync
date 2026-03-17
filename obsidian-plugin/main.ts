@@ -800,19 +800,22 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    // Default Tags
+    // Default Tags — full-width column layout so chips aren't crammed into controlEl
     const tagSetting = new Setting(containerEl)
       .setName('Default tags')
       .setDesc('Tags applied to every imported bookmark note.');
 
-    tagSetting.controlEl.empty();
+    tagSetting.settingEl.style.flexDirection = 'column';
+    tagSetting.settingEl.style.alignItems = 'flex-start';
+    tagSetting.controlEl.style.display = 'none';
 
-    const chipsContainer = tagSetting.controlEl.createDiv();
+    const chipsContainer = tagSetting.settingEl.createDiv();
     chipsContainer.style.display = 'flex';
     chipsContainer.style.flexWrap = 'wrap';
     chipsContainer.style.gap = '6px';
     chipsContainer.style.alignItems = 'center';
-    chipsContainer.style.marginTop = '4px';
+    chipsContainer.style.width = '100%';
+    chipsContainer.style.marginTop = '8px';
 
     const renderChips = () => {
       chipsContainer.empty();
@@ -821,8 +824,8 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
         const chip = chipsContainer.createEl('span');
         chip.style.display = 'inline-flex';
         chip.style.alignItems = 'center';
-        chip.style.gap = '4px';
-        chip.style.padding = '2px 8px';
+        chip.style.gap = '3px';
+        chip.style.padding = '2px 8px 2px 10px';
         chip.style.borderRadius = '12px';
         chip.style.border = '1px solid var(--background-modifier-border)';
         chip.style.fontSize = '0.85em';
@@ -834,7 +837,8 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
         removeBtn.style.background = 'none';
         removeBtn.style.border = 'none';
         removeBtn.style.cursor = 'pointer';
-        removeBtn.style.padding = '0';
+        removeBtn.style.padding = '0 2px';
+        removeBtn.style.fontSize = '1em';
         removeBtn.style.lineHeight = '1';
         removeBtn.style.color = 'var(--text-muted)';
         removeBtn.onclick = async () => {
@@ -848,18 +852,21 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
       inputRow.style.display = 'flex';
       inputRow.style.alignItems = 'center';
       inputRow.style.gap = '6px';
-      inputRow.style.marginTop = '6px';
-      inputRow.style.width = '100%';
+      if (this.plugin.settings.defaultTags.length > 0) {
+        inputRow.style.marginTop = '4px';
+        inputRow.style.width = '100%';
+      }
 
       const tagInput = inputRow.createEl('input', { type: 'text' });
       tagInput.placeholder = 'Add tag\u2026';
       tagInput.style.border = '1px solid var(--background-modifier-border)';
       tagInput.style.borderRadius = '4px';
-      tagInput.style.padding = '2px 6px';
+      tagInput.style.padding = '3px 8px';
       tagInput.style.fontSize = '0.85em';
       tagInput.style.background = 'var(--background-primary)';
       tagInput.style.color = 'var(--text-normal)';
-      tagInput.style.width = '120px';
+      tagInput.style.width = '140px';
+      tagInput.style.outline = 'none';
 
       const hint = inputRow.createEl('span', { text: 'Press Enter to add' });
       hint.style.color = 'var(--text-muted)';
