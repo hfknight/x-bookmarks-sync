@@ -124,6 +124,9 @@ class XBookmarksView extends ItemView {
   isScrolling: boolean = false;
   cancelRequested: boolean = false;
   collectedBookmarks: Map<string, any> = new Map();
+  incrementalMode: boolean = true;
+  syncFromLastLabel: HTMLElement | null = null;
+  syncFromLastCheckbox: HTMLInputElement | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: XBookmarksSync) {
     super(leaf);
@@ -705,7 +708,14 @@ class XBookmarksView extends ItemView {
 }
 
 export default class XBookmarksSync extends Plugin {
+  importedIds: Set<string> = new Set();
+
   async onload() {
+    const data = await this.loadData();
+    if (data?.importedIds) {
+      this.importedIds = new Set(data.importedIds);
+    }
+
     addIcon('x-brand', `<g transform="scale(4.1667)"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></g>`);
 
     this.registerView(VIEW_TYPE, (leaf) => new XBookmarksView(leaf, this));
@@ -780,6 +790,8 @@ export default class XBookmarksSync extends Plugin {
   }
 
   isTweetImported(tweet: any): boolean {
+    if (this.importedIds.has(tweet.id)) return true;
+    // Fallback: check file paths for bookmarks imported before the ID set existed
     const oldFileName = `x-bookmarks/Tweet-${tweet.id}.md`;
     const newFileName = this.getFileName(tweet);
     return (
@@ -805,7 +817,9 @@ export default class XBookmarksSync extends Plugin {
         await this.app.vault.create(fileName, content);
         count++;
       }
+      this.importedIds.add(tweet.id);
     }
+    await this.saveData({ importedIds: Array.from(this.importedIds) });
     new Notice(`Successfully saved ${count} new bookmarks!`);
   }
 
