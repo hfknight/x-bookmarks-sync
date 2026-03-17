@@ -32,7 +32,7 @@ export class XBookmarksView extends ItemView {
     return 'X Bookmarks';
   }
   getIcon() {
-    return 'x-brand';
+    return 'x-bookmarks-sync';
   }
 
   async onOpen() {
@@ -59,6 +59,8 @@ export class XBookmarksView extends ItemView {
     toolbar.style.backgroundColor = 'var(--background-secondary)';
 
     this.hintSpan = toolbar.createEl('span', { cls: 'text-muted' });
+    this.hintSpan.style.fontSize = 'var(--font-smaller)';
+    this.hintSpan.style.whiteSpace = 'nowrap';
 
     const btnGroup = toolbar.createDiv();
     btnGroup.style.display = 'flex';
