@@ -824,23 +824,29 @@ class XBookmarksSyncSettingTab extends PluginSettingTab {
         const chip = chipsContainer.createEl('span');
         chip.style.display = 'inline-flex';
         chip.style.alignItems = 'center';
-        chip.style.gap = '3px';
-        chip.style.padding = '2px 8px 2px 10px';
-        chip.style.borderRadius = '12px';
-        chip.style.border = '1px solid var(--background-modifier-border)';
+        chip.style.gap = '2px';
+        chip.style.padding = 'var(--tag-padding-y, 2px) var(--tag-padding-x, 8px)';
+        chip.style.borderRadius = 'var(--tag-radius, 12px)';
+        chip.style.border = 'var(--tag-border-width, 1px) solid var(--tag-border-color, var(--background-modifier-border))';
         chip.style.fontSize = '0.85em';
-        chip.style.backgroundColor = 'var(--background-secondary)';
-        chip.style.color = 'var(--text-normal)';
+        chip.style.backgroundColor = 'var(--tag-background, var(--background-secondary))';
+        chip.style.color = 'var(--tag-color, var(--text-normal))';
         chip.createSpan({ text: tag });
 
-        const removeBtn = chip.createEl('button', { text: '×' });
-        removeBtn.style.background = 'none';
-        removeBtn.style.border = 'none';
+        const removeBtn = chip.createEl('button');
+        removeBtn.setText('×');
+        // Reset all browser/Obsidian button defaults
+        removeBtn.style.all = 'unset';
         removeBtn.style.cursor = 'pointer';
-        removeBtn.style.padding = '0 2px';
         removeBtn.style.fontSize = '1em';
         removeBtn.style.lineHeight = '1';
-        removeBtn.style.color = 'var(--text-muted)';
+        removeBtn.style.color = 'var(--tag-color, var(--text-muted))';
+        removeBtn.style.opacity = '0.6';
+        removeBtn.style.paddingLeft = '3px';
+        removeBtn.style.display = 'flex';
+        removeBtn.style.alignItems = 'center';
+        removeBtn.onmouseenter = () => { removeBtn.style.opacity = '1'; };
+        removeBtn.onmouseleave = () => { removeBtn.style.opacity = '0.6'; };
         removeBtn.onclick = async () => {
           this.plugin.settings.defaultTags = this.plugin.settings.defaultTags.filter(t => t !== tag);
           await this.plugin.saveSettings();
