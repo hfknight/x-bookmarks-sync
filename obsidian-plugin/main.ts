@@ -1,4 +1,4 @@
-import { Plugin, ItemView, WorkspaceLeaf, Notice, Modal, App, addIcon, setIcon } from 'obsidian';
+import { Plugin, ItemView, WorkspaceLeaf, Notice, Modal, App, addIcon, setIcon, PluginSettingTab, Setting } from 'obsidian';
 import Defuddle from 'defuddle/full';
 
 const VIEW_TYPE = 'x-bookmarks-webview';
@@ -762,6 +762,22 @@ class XBookmarksView extends ItemView {
 
 }
 
+class XBookmarksSyncSettingTab extends PluginSettingTab {
+  plugin: XBookmarksSync;
+
+  constructor(app: App, plugin: XBookmarksSync) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl('h2', { text: 'X Bookmarks Sync' });
+    // settings will be added here
+  }
+}
+
 interface XBookmarksSyncData {
   importedIds: string[];
   defaultFolder: string;
@@ -810,6 +826,8 @@ export default class XBookmarksSync extends Plugin {
         this.openUrlInWebview(params.url);
       }
     });
+
+    this.addSettingTab(new XBookmarksSyncSettingTab(this.app, this));
   }
 
   onunload() {
