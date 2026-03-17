@@ -875,7 +875,7 @@ export default class XBookmarksSync extends Plugin {
     title = title.replace(/[\\/:"*?<>|]/g, '').trim();
     if (!title) title = 'Bookmark';
 
-    return `x-bookmarks/${date}-${author}-${title}.md`;
+    return `${this.settings.defaultFolder}/${date}-${author}-${title}.md`;
   }
 
   isTweetImported(tweet: any): boolean {
@@ -890,7 +890,7 @@ export default class XBookmarksSync extends Plugin {
   }
 
   async saveBookmarksToVault(bookmarks: any[]) {
-    const targetFolder = 'x-bookmarks';
+    const targetFolder = this.settings.defaultFolder;
     let folder = this.app.vault.getAbstractFileByPath(targetFolder);
     if (!folder) {
       await this.app.vault.createFolder(targetFolder);
