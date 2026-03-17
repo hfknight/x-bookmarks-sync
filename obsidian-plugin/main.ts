@@ -1,4 +1,4 @@
-import { Plugin, ItemView, WorkspaceLeaf, Notice, Modal, App, addIcon } from 'obsidian';
+import { Plugin, ItemView, WorkspaceLeaf, Notice, Modal, App, addIcon, setIcon } from 'obsidian';
 import Defuddle from 'defuddle/full';
 
 const VIEW_TYPE = 'x-bookmarks-webview';
@@ -178,7 +178,10 @@ class XBookmarksView extends ItemView {
     this.syncFromLastLabel.style.fontSize = '0.9em';
     this.syncFromLastLabel.style.cursor = 'pointer';
     this.syncFromLastCheckbox = this.syncFromLastLabel.createEl('input', { type: 'checkbox' });
-    this.syncFromLastCheckbox.checked = true;
+    // Default to unchecked (full sync) if user has never imported any bookmarks
+    const hasImported = this.plugin.importedIds.size > 0;
+    this.incrementalMode = hasImported;
+    this.syncFromLastCheckbox.checked = hasImported;
     this.syncFromLastCheckbox.onchange = () => {
       this.incrementalMode = this.syncFromLastCheckbox!.checked;
       this.updateToolbar();
@@ -190,7 +193,9 @@ class XBookmarksView extends ItemView {
       cls: 'mod-cta'
     });
 
-    this.closeBtn = btnGroup.createEl('button', { text: 'Close' });
+    this.closeBtn = btnGroup.createEl('button');
+    this.closeBtn.setAttribute('title', 'Close');
+    setIcon(this.closeBtn, 'lucide-x');
     this.closeBtn.onclick = () => {
       this.leaf.detach();
     };
