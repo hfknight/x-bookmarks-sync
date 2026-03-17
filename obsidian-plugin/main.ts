@@ -908,6 +908,7 @@ export default class XBookmarksSync extends Plugin {
       }
       this.importedIds.add(tweet.id);
     }
+    this.settings.lastSyncAt = new Date().toISOString();
     await this.saveSettings();
     new Notice(`Successfully saved ${count} new bookmarks!`);
   }
@@ -925,7 +926,7 @@ author: ${safeAuthor}
 username: ${safeUsername}
 scraped_date: ${date}
 url: ${safeUrl}
-tags: [twitter, bookmark]
+tags: [${this.settings.defaultTags.join(', ')}]
 ---
 
 # Tweet by ${tweet.name} (${tweet.username})
