@@ -781,9 +781,13 @@ export default class XBookmarksSync extends Plugin {
 
   async onload() {
     const data = await this.loadData();
-    if (data?.importedIds) {
-      this.importedIds = new Set(data.importedIds);
-    }
+    this.settings = {
+      importedIds: data?.importedIds ?? [],
+      defaultFolder: data?.defaultFolder ?? 'x-bookmarks',
+      defaultTags: data?.defaultTags ?? ['twitter', 'bookmark'],
+      lastSyncAt: data?.lastSyncAt ?? null,
+    };
+    this.importedIds = new Set(this.settings.importedIds);
 
     addIcon('x-brand', `<g transform="scale(4.1667)"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></g>`);
 
