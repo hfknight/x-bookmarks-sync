@@ -9,4 +9,5 @@ coverage/
 src/pluginFiles.ts
 obsidian-plugin/main.js
 main.js
+styles.css
 *.code-workspace
