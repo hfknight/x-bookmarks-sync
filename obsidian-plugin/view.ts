@@ -51,33 +51,18 @@ export class XBookmarksView extends ItemView {
 
     // Toolbar
     const toolbar = container.createDiv({ cls: 'x-bookmarks-toolbar' });
-    toolbar.style.padding = '10px';
-    toolbar.style.display = 'flex';
-    toolbar.style.justifyContent = 'space-between';
-    toolbar.style.alignItems = 'center';
-    toolbar.style.borderBottom = '1px solid var(--background-modifier-border)';
-    toolbar.style.backgroundColor = 'var(--background-secondary)';
 
-    this.hintSpan = toolbar.createEl('span', { cls: 'text-muted' });
-    this.hintSpan.style.fontSize = 'var(--font-smaller)';
-    this.hintSpan.style.whiteSpace = 'nowrap';
+    this.hintSpan = toolbar.createEl('span', { cls: 'text-muted x-bookmarks-toolbar-hint' });
 
-    const btnGroup = toolbar.createDiv();
-    btnGroup.style.display = 'flex';
-    btnGroup.style.gap = '10px';
+    const btnGroup = toolbar.createDiv({ cls: 'x-bookmarks-btn-group' });
 
     this.copyBtn = btnGroup.createEl('button', { text: 'Copy as MD', cls: 'mod-cta' });
-    this.copyBtn.style.display = 'none';
+    this.copyBtn.addClass('is-hidden');
     this.copyBtn.onclick = async () => {
       await this.copyAsMarkdown();
     };
 
-    this.syncFromLastLabel = btnGroup.createEl('label');
-    this.syncFromLastLabel.style.display = 'flex';
-    this.syncFromLastLabel.style.alignItems = 'center';
-    this.syncFromLastLabel.style.gap = '4px';
-    this.syncFromLastLabel.style.fontSize = '0.9em';
-    this.syncFromLastLabel.style.cursor = 'pointer';
+    this.syncFromLastLabel = btnGroup.createEl('label', { cls: 'x-bookmarks-sync-label' });
     this.syncFromLastCheckbox = this.syncFromLastLabel.createEl('input', { type: 'checkbox' });
     // Default to unchecked (full sync) if user has never imported any bookmarks
     const hasImported = this.plugin.importedIds.size > 0;
@@ -102,10 +87,7 @@ export class XBookmarksView extends ItemView {
     };
 
     // Webview wrapper
-    const webviewContainer = container.createDiv();
-    webviewContainer.style.width = '100%';
-    webviewContainer.style.height = 'calc(100% - 50px)';
-    webviewContainer.style.backgroundColor = '#fff';
+    const webviewContainer = container.createDiv({ cls: 'x-bookmarks-webview-container' });
 
     this.webview = document.createElement('webview');
     this.webview.setAttribute('src', this.currentUrl);
@@ -230,16 +212,16 @@ export class XBookmarksView extends ItemView {
         ? 'Will stop when reaching already-imported bookmarks'
         : 'Will scroll through all bookmarks';
       this.hintSpan.setText(hint);
-      this.extractBtn.style.display = '';
+      this.extractBtn.toggleClass('is-hidden', false);
       this.extractBtn.innerText = 'Extract Bookmarks';
       this.extractBtn.onclick = async () => { await this.autoScrollAndExtract(); };
-      this.copyBtn.style.display = 'none';
-      if (this.syncFromLastLabel) this.syncFromLastLabel.style.display = 'flex';
+      this.copyBtn.toggleClass('is-hidden', true);
+      if (this.syncFromLastLabel) this.syncFromLastLabel.toggleClass('is-hidden', false);
     } else {
       this.hintSpan.setText('');
-      this.extractBtn.style.display = 'none';
-      this.copyBtn.style.display = 'block';
-      if (this.syncFromLastLabel) this.syncFromLastLabel.style.display = 'none';
+      this.extractBtn.toggleClass('is-hidden', true);
+      this.copyBtn.toggleClass('is-hidden', false);
+      if (this.syncFromLastLabel) this.syncFromLastLabel.toggleClass('is-hidden', true);
     }
   }
 
@@ -330,7 +312,7 @@ export class XBookmarksView extends ItemView {
     this.hintSpan.setText(`Loading bookmarks... ${count} found`);
     this.extractBtn.innerText = 'Cancel';
     this.extractBtn.onclick = () => { this.cancelRequested = true; };
-    if (this.syncFromLastLabel) this.syncFromLastLabel.style.display = 'none';
+    if (this.syncFromLastLabel) this.syncFromLastLabel.toggleClass('is-hidden', true);
   }
 
   private async pollFlag(): Promise<boolean> {
@@ -607,7 +589,6 @@ export class XBookmarksView extends ItemView {
       // Final merge: flush anything the observer or API interceptor collected during
       // the last zero-new-content iterations that was never picked up in the loop
       try {
-        let finalNew = 0;
         const finalJson = await this.webview.executeJavaScript(`(function(){
           try {
             return JSON.stringify({
@@ -621,7 +602,6 @@ export class XBookmarksView extends ItemView {
           for (const tweet of [...(finalSources.observer || []), ...(finalSources.api || [])]) {
             if (!this.collectedBookmarks.has(tweet.id)) {
               this.collectedBookmarks.set(tweet.id, tweet);
-              finalNew++;
             }
           }
         }
