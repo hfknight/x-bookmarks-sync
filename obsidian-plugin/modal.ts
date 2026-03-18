@@ -20,13 +20,7 @@ export class BookmarkSelectionModal extends Modal {
     contentEl.empty();
     contentEl.createEl('h2', { text: 'Select Bookmarks to Import' });
 
-    const listContainer = contentEl.createDiv({
-      cls: 'bookmark-list-container'
-    });
-    listContainer.style.maxHeight = '400px';
-    listContainer.style.overflowY = 'auto';
-    listContainer.style.marginBottom = '20px';
-    listContainer.style.paddingRight = '10px';
+    const listContainer = contentEl.createDiv({ cls: 'bookmark-list-container' });
 
     let newCount = 0;
 
@@ -34,21 +28,13 @@ export class BookmarkSelectionModal extends Modal {
       const isImported = this.plugin.isTweetImported(bookmark);
 
       const itemDiv = listContainer.createDiv({ cls: 'bookmark-item' });
-      itemDiv.style.display = 'flex';
-      itemDiv.style.alignItems = 'flex-start';
-      itemDiv.style.marginBottom = '10px';
-      itemDiv.style.padding = '10px';
-      itemDiv.style.border = '1px solid var(--background-modifier-border)';
-      itemDiv.style.borderRadius = '5px';
 
-      const checkbox = itemDiv.createEl('input', { type: 'checkbox' });
-      checkbox.style.marginTop = '4px';
-      checkbox.style.marginRight = '10px';
+      const checkbox = itemDiv.createEl('input', { type: 'checkbox', cls: 'bookmark-item-checkbox' });
 
       if (isImported) {
         checkbox.disabled = true;
         checkbox.checked = false;
-        itemDiv.style.opacity = '0.5';
+        itemDiv.addClass('bookmark-item--imported');
       } else {
         checkbox.checked = true;
         this.selectedIds.add(bookmark.id);
@@ -64,7 +50,7 @@ export class BookmarkSelectionModal extends Modal {
         importBtn.innerText = `Import Selected (${this.selectedIds.size})`;
       };
 
-      const textDiv = itemDiv.createDiv();
+      const textDiv = itemDiv.createDiv({ cls: 'bookmark-item-text' });
       const title = bookmark.text
         ? (bookmark.text.length > 80 ? bookmark.text.substring(0, 80) + '...' : bookmark.text)
         : 'No text';
@@ -73,21 +59,14 @@ export class BookmarkSelectionModal extends Modal {
       });
       textDiv.createEl('br');
       textDiv.createEl('span', { text: title, cls: 'text-muted' });
-      textDiv.style.fontSize = '0.9em';
 
       if (isImported) {
         textDiv.createEl('br');
-        const badge = textDiv.createEl('span', { text: 'Already imported' });
-        badge.style.color = 'var(--text-error)';
-        badge.style.fontSize = '0.85em';
-        badge.style.fontWeight = 'bold';
+        textDiv.createEl('span', { text: 'Already imported', cls: 'bookmark-item-badge' });
       }
     });
 
-    const btnContainer = contentEl.createDiv();
-    btnContainer.style.display = 'flex';
-    btnContainer.style.justifyContent = 'flex-end';
-    btnContainer.style.gap = '10px';
+    const btnContainer = contentEl.createDiv({ cls: 'bookmark-modal-btn-container' });
 
     const cancelBtn = btnContainer.createEl('button', { text: 'Cancel' });
     cancelBtn.onclick = () => this.close();

@@ -1,0 +1,46 @@
+/* ── Shared utility ─────────────────────────────────────────────────── */
+.is-hidden {
+  display: none !important;
+}
+
+/* ── Bookmark Selection Modal ────────────────────────────────────────── */
+.bookmark-list-container {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  padding-right: 10px;
+}
+
+.bookmark-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+}
+
+.bookmark-item-checkbox {
+  margin-top: 4px;
+  margin-right: 10px;
+}
+
+.bookmark-item--imported {
+  opacity: 0.5;
+}
+
+.bookmark-item-text {
+  font-size: 0.9em;
+}
+
+.bookmark-item-badge {
+  color: var(--text-error);
+  font-size: 0.85em;
+  font-weight: bold;
+}
+
+.bookmark-modal-btn-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
