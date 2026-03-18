@@ -117,7 +117,7 @@ export class XBookmarksView extends ItemView {
     });
 
     this.webview.addEventListener('dom-ready', () => {
-      this.webview!.insertCSS(`
+      void this.webview!.insertCSS(`
                 header[role="banner"] { display: none !important; }
                 div[data-testid="sidebarColumn"] { display: none !important; }
                 main[role="main"] { align-items: center !important; }
