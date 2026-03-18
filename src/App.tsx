@@ -11,7 +11,7 @@ import {
 import { motion } from 'motion/react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { mainJs, manifestJson } from './pluginFiles';
+import { mainJs, manifestJson, stylesCss } from './pluginFiles';
 
 function XLogo({ className }: { className?: string }) {
   return (
@@ -30,6 +30,7 @@ export default function App() {
     // Add files to zip
     zip.file('main.js', mainJs);
     zip.file('manifest.json', manifestJson);
+    zip.file('styles.css', stylesCss);
 
     // Generate zip file
     const content = await zip.generateAsync({ type: 'blob' });

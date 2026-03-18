@@ -33,6 +33,7 @@ jobs:
           mkdir "$PLUGIN_NAME"
           cp main.js "$PLUGIN_NAME/"
           cp manifest.json "$PLUGIN_NAME/"
+          cp styles.css "$PLUGIN_NAME/"
           zip -r "$PLUGIN_NAME.zip" "$PLUGIN_NAME"
 
       - name: Create GitHub Release
@@ -41,5 +42,6 @@ jobs:
           files: |
             main.js
             manifest.json
+            styles.css
             versions.json
             ${{ env.PLUGIN_NAME }}.zip
