@@ -2,11 +2,24 @@ import { ItemView, WorkspaceLeaf, Notice, setIcon } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import type XBookmarksSync from './main';
 import { BookmarkSelectionModal } from './modal';
-import { VIEW_TYPE } from './types';
+import { VIEW_TYPE, Tweet } from './types';
+
+interface ElectronWebview extends HTMLElement {
+  executeJavaScript(code: string): Promise<unknown>;
+  insertCSS(css: string): Promise<string>;
+}
+
+interface ExtractionResult {
+  success: boolean;
+  data: Tweet[];
+  totalArticles?: number;
+  skipped?: unknown[];
+  error?: string;
+}
 
 export class XBookmarksView extends ItemView {
   plugin: XBookmarksSync;
-  webview: any;
+  webview: ElectronWebview | null;
   extractBtn: HTMLButtonElement;
   copyBtn: HTMLButtonElement;
   closeBtn: HTMLButtonElement;
@@ -14,7 +27,7 @@ export class XBookmarksView extends ItemView {
   hintSpan: HTMLElement | null = null;
   isScrolling: boolean = false;
   cancelRequested: boolean = false;
-  collectedBookmarks: Map<string, any> = new Map();
+  collectedBookmarks: Map<string, Tweet> = new Map();
   incrementalMode: boolean = true;
   syncFromLastLabel: HTMLElement | null = null;
   syncFromLastCheckbox: HTMLInputElement | null = null;
@@ -90,21 +103,21 @@ export class XBookmarksView extends ItemView {
     // Webview wrapper
     const webviewContainer = container.createDiv({ cls: 'x-bookmarks-webview-container' });
 
-    this.webview = document.createElement('webview');
+    this.webview = document.createElement('webview') as unknown as ElectronWebview;
     this.webview.setAttribute('src', this.currentUrl);
     this.webview.classList.add('x-bookmarks-webview');
 
-    this.webview.addEventListener('did-navigate', (e: any) => {
+    this.webview.addEventListener('did-navigate', (e: Event & { url: string }) => {
       this.currentUrl = e.url;
       this.updateToolbar();
     });
-    this.webview.addEventListener('did-navigate-in-page', (e: any) => {
+    this.webview.addEventListener('did-navigate-in-page', (e: Event & { url: string }) => {
       this.currentUrl = e.url;
       this.updateToolbar();
     });
 
     this.webview.addEventListener('dom-ready', () => {
-      this.webview.insertCSS(`
+      this.webview!.insertCSS(`
                 header[role="banner"] { display: none !important; }
                 div[data-testid="sidebarColumn"] { display: none !important; }
                 main[role="main"] { align-items: center !important; }
@@ -112,7 +125,7 @@ export class XBookmarksView extends ItemView {
       // Install network interceptors early — dom-ready fires before X's React bundle runs,
       // so our patches are in place before X stores any method references.
       // Intercept both fetch and XHR since it's unclear which X uses.
-      this.webview.executeJavaScript(`
+      this.webview!.executeJavaScript(`
         if (!window.__xbsIntercepted) {
           window.__xbsIntercepted = true;
           window.__xbsApiCollected = {};
@@ -233,7 +246,7 @@ export class XBookmarksView extends ItemView {
     try {
       const html = await this.webview.executeJavaScript(
         'document.documentElement.outerHTML'
-      );
+      ) as string;
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
 
@@ -321,7 +334,7 @@ export class XBookmarksView extends ItemView {
     while (Date.now() - start < 3000) {
       await new Promise(resolve => setTimeout(resolve, 100));
       try {
-        const val = await this.webview.executeJavaScript('window.__newTweetsAppeared');
+        const val = await this.webview!.executeJavaScript('window.__newTweetsAppeared') as boolean;
         if (val) return true;
       } catch {
         return false; // webview destroyed or navigated — treat as no new tweets
@@ -332,7 +345,7 @@ export class XBookmarksView extends ItemView {
 
   private async cleanup() {
     try {
-      await this.webview.executeJavaScript(`
+      await this.webview!.executeJavaScript(`
         if (window.__xbsObserver) {
           window.__xbsObserver.disconnect();
           window.__xbsObserver = null;
@@ -438,9 +451,9 @@ export class XBookmarksView extends ItemView {
         while (stableMs < 500 && Date.now() < deadline) {
           await new Promise(resolve => setTimeout(resolve, 200));
           try {
-            const count: number = await this.webview.executeJavaScript(
+            const count = await this.webview.executeJavaScript(
               `document.querySelectorAll('article[data-testid="tweet"]').length`
-            );
+            ) as number;
             if (count === prevCount) {
               stableMs += 200;
             } else {
@@ -453,7 +466,7 @@ export class XBookmarksView extends ItemView {
 
       // Pre-loop capture: grab tweets already in the stable initial DOM.
       // Observer is already running so anything added during/after this is also caught.
-      const preResult = await this.webview.executeJavaScript(this.getExtractionScript());
+      const preResult = await this.webview.executeJavaScript(this.getExtractionScript()) as ExtractionResult;
       if (preResult && preResult.success && preResult.data) {
         for (const tweet of preResult.data) {
           this.collectedBookmarks.set(tweet.id, tweet);
@@ -518,7 +531,7 @@ export class XBookmarksView extends ItemView {
         // (immune to virtual-list unmounting that can happen before DOM extraction runs)
         const observerResult = await this.webview.executeJavaScript(
           '(function(){ return { success: true, data: Object.values(window.__xbsCollected || {}) }; })()'
-        );
+        ) as ExtractionResult;
         if (observerResult && observerResult.success && observerResult.data) {
           for (const tweet of observerResult.data) {
             if (!this.collectedBookmarks.has(tweet.id)) {
@@ -533,8 +546,8 @@ export class XBookmarksView extends ItemView {
         // JSON.stringify in the webview avoids Electron structured-clone failures.
         const apiJson = await this.webview.executeJavaScript(
           '(function(){ try { return JSON.stringify(Object.values(window.__xbsApiCollected || {})); } catch(e) { return "[]"; } })()'
-        );
-        const apiResult: any[] = apiJson ? JSON.parse(apiJson) : [];
+        ) as string;
+        const apiResult = (apiJson ? JSON.parse(apiJson) : []) as Tweet[];
         for (const tweet of apiResult) {
           if (!this.collectedBookmarks.has(tweet.id)) {
             this.collectedBookmarks.set(tweet.id, tweet);
@@ -544,7 +557,7 @@ export class XBookmarksView extends ItemView {
 
         // Fallback: DOM extraction catches tweets without a /status/ URL (no stable id)
         // and any that the observer may have missed
-        const result = await this.webview.executeJavaScript(this.getExtractionScript());
+        const result = await this.webview.executeJavaScript(this.getExtractionScript()) as ExtractionResult;
         if (result && result.success && result.data) {
           for (const tweet of result.data) {
             if (!this.collectedBookmarks.has(tweet.id)) {
@@ -559,7 +572,7 @@ export class XBookmarksView extends ItemView {
         // Uses DOM extraction (point-in-time) — not the cumulative observer/API sets.
         // Empty or failed DOM result is inconclusive — allImportedCount is left unchanged (not reset).
         if (incrementalMode && result && result.success && result.data && result.data.length > 0) {
-          const allAlreadyImported = (result.data as any[]).every(
+          const allAlreadyImported = result.data.every(
             (t) => this.plugin.importedIds.has(t.id)
           );
           if (allAlreadyImported) {
@@ -597,7 +610,7 @@ export class XBookmarksView extends ItemView {
               api: Object.values(window.__xbsApiCollected || {})
             });
           } catch(e) { return '{"observer":[],"api":[]}'; }
-        })()`);
+        })()`) as string;
         const finalSources = finalJson ? JSON.parse(finalJson) : { observer: [], api: [] };
         if (finalSources) {
           for (const tweet of [...(finalSources.observer || []), ...(finalSources.api || [])]) {

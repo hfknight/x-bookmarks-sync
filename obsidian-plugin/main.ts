@@ -1,5 +1,5 @@
 import { Plugin, addIcon, Notice, TFolder } from 'obsidian';
-import { VIEW_TYPE, XBookmarksSyncData } from './types';
+import { VIEW_TYPE, XBookmarksSyncData, Tweet } from './types';
 import { XBookmarksView } from './view';
 import { XBookmarksSyncSettingTab } from './settings-tab';
 
@@ -28,20 +28,20 @@ export default class XBookmarksSync extends Plugin {
     this.registerView(VIEW_TYPE, (leaf) => new XBookmarksView(leaf, this));
 
     this.addRibbonIcon('x-bookmarks-sync', 'Open X bookmarks', () => {
-      this.activateView();
+      void this.activateView();
     });
 
     this.addCommand({
       id: 'open-x-bookmarks',
       name: 'Open X bookmarks view',
       callback: () => {
-        this.activateView();
+        void this.activateView();
       }
     });
 
     this.registerObsidianProtocolHandler('x-bookmarks', (params) => {
       if (params.url) {
-        this.openUrlInWebview(params.url);
+        void this.openUrlInWebview(params.url);
       }
     });
 
@@ -89,11 +89,11 @@ export default class XBookmarksSync extends Plugin {
     }
 
     if (leaf) {
-      workspace.revealLeaf(leaf);
+      await workspace.revealLeaf(leaf);
     }
   }
 
-  getFileName(tweet: any): string {
+  getFileName(tweet: Tweet): string {
     const tweetDate = tweet.id && /^\d+$/.test(tweet.id)
       ? new Date(Number((BigInt(tweet.id) >> BigInt(22)) + BigInt(1288834974657)))
       : new Date();
@@ -112,7 +112,7 @@ export default class XBookmarksSync extends Plugin {
     return `${this.settings.defaultFolder}/${date}-${author}-${title}.md`;
   }
 
-  isTweetImported(tweet: any): boolean {
+  isTweetImported(tweet: Tweet): boolean {
     if (this.importedIds.has(tweet.id)) return true;
     // Fallback: check file paths for bookmarks imported before the ID set existed
     const oldFileName = `x-bookmarks/Tweet-${tweet.id}.md`;
@@ -123,7 +123,7 @@ export default class XBookmarksSync extends Plugin {
     );
   }
 
-  async saveBookmarksToVault(bookmarks: any[]) {
+  async saveBookmarksToVault(bookmarks: Tweet[]) {
     const targetFolder = this.settings.defaultFolder;
     const folder = this.app.vault.getAbstractFileByPath(targetFolder);
     if (!(folder instanceof TFolder)) {
@@ -147,7 +147,7 @@ export default class XBookmarksSync extends Plugin {
     new Notice(`Successfully saved ${count} new bookmarks!`);
   }
 
-  formatTweet(tweet: any) {
+  formatTweet(tweet: Tweet) {
     const date = new Date().toISOString().split('T')[0];
     const safeId = `"${tweet.id}"`;
     const safeAuthor = `"${(tweet.name || '').replace(/"/g, '\\"')}"`;

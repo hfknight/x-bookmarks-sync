@@ -40,7 +40,7 @@ export default function App() {
   };
 
   const copyToClipboard = (text: string, file: string) => {
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard.writeText(text);
     setCopiedFile(file);
     setTimeout(() => setCopiedFile(null), 2000);
   };
@@ -118,7 +118,7 @@ export default function App() {
                 'Download the plugin .zip file using the button above.',
                 'Extract the contents.',
                 'Open your Obsidian vault folder.',
-                "Navigate to your vault's config folder (usually .obsidian)/plugins/ (create it if it doesn't exist).",
+                "Open Settings → Community plugins → Open plugins folder.",
                 'Create a new folder named x-bookmarks-sync.',
                 'Move the extracted main.js, manifest.json, and styles.css into this new folder.',
                 'Restart Obsidian and enable the plugin in Settings > Community Plugins.'

@@ -1,14 +1,15 @@
 import { Modal, App, Notice } from 'obsidian';
 import type XBookmarksSync from './main';
+import type { Tweet } from './types';
 
 export class BookmarkSelectionModal extends Modal {
-  bookmarks: any[];
+  bookmarks: Tweet[];
   plugin: XBookmarksSync;
   selectedIds: Set<string>;
   onImportComplete?: () => void;
   onDidClose?: () => void;
 
-  constructor(app: App, plugin: XBookmarksSync, bookmarks: any[]) {
+  constructor(app: App, plugin: XBookmarksSync, bookmarks: Tweet[]) {
     super(app);
     this.plugin = plugin;
     this.bookmarks = bookmarks;
