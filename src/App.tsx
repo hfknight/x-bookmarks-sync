@@ -6,13 +6,20 @@ import {
   Terminal,
   FileCode2,
   Info,
-  Twitter,
   FolderSync
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { mainJs, manifestJson } from './pluginFiles';
+
+function XLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.258 5.63 5.906-5.63Zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
 
 export default function App() {
   const [copiedFile, setCopiedFile] = useState<string | null>(null);
@@ -49,7 +56,7 @@ export default function App() {
             className="flex items-center gap-4 mb-6"
           >
             <div className="p-3 bg-indigo-500/20 rounded-2xl border border-indigo-500/30">
-              <Twitter className="w-8 h-8 text-indigo-400" />
+              <XLogo className="w-8 h-8 text-indigo-400" />
             </div>
             <div className="p-3 bg-zinc-800 rounded-2xl border border-white/10">
               <FolderSync className="w-8 h-8 text-zinc-300" />
@@ -110,9 +117,9 @@ export default function App() {
                 'Download the plugin .zip file using the button above.',
                 'Extract the contents.',
                 'Open your Obsidian vault folder.',
-                "Navigate to .obsidian/plugins/ (create it if it doesn't exist).",
+                "Navigate to your vault's config folder (usually .obsidian)/plugins/ (create it if it doesn't exist).",
                 'Create a new folder named x-bookmarks-sync.',
-                'Move the extracted main.js and manifest.json into this new folder.',
+                'Move the extracted main.js, manifest.json, and styles.css into this new folder.',
                 'Restart Obsidian and enable the plugin in Settings > Community Plugins.'
               ].map((step, i) => (
                 <li key={i} className="relative pl-10">

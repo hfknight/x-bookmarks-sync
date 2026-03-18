@@ -58,7 +58,7 @@ export default class XBookmarksSync extends Plugin {
         ...this.settings,
         importedIds: Array.from(this.importedIds),
       });
-    } catch (e) {
+    } catch {
       new Notice('X Bookmarks Sync: failed to save settings.');
     }
   }
