@@ -74,17 +74,19 @@
 
 .x-bms-tag-remove-btn {
   all: unset;
+  background-color: transparent;
   cursor: pointer;
   font-size: 1em;
   line-height: 1;
   color: var(--tag-color, var(--text-muted));
   opacity: 0.6;
-  padding-left: 3px;
+  margin-left: 3px;
   display: flex;
   align-items: center;
 }
 
 .x-bms-tag-remove-btn:hover {
+  background-color: transparent;
   opacity: 1;
 }
 
