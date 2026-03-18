@@ -27,13 +27,13 @@ export default class XBookmarksSync extends Plugin {
 
     this.registerView(VIEW_TYPE, (leaf) => new XBookmarksView(leaf, this));
 
-    this.addRibbonIcon('x-bookmarks-sync', 'Open X Bookmarks', () => {
+    this.addRibbonIcon('x-bookmarks-sync', 'Open X bookmarks', () => {
       this.activateView();
     });
 
     this.addCommand({
       id: 'open-x-bookmarks',
-      name: 'Open X Bookmarks View',
+      name: 'Open X bookmarks view',
       callback: () => {
         this.activateView();
       }
@@ -49,7 +49,6 @@ export default class XBookmarksSync extends Plugin {
   }
 
   onunload() {
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE);
   }
 
   async saveSettings() {
@@ -59,7 +58,7 @@ export default class XBookmarksSync extends Plugin {
         importedIds: Array.from(this.importedIds),
       });
     } catch {
-      new Notice('X Bookmarks Sync: failed to save settings.');
+      new Notice('X bookmarks sync: failed to save settings.');
     }
   }
 

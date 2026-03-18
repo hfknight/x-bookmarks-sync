@@ -16,7 +16,7 @@ export class XBookmarksSyncSettingTab extends PluginSettingTab {
       .setName('Default folder')
       .setDesc('Vault folder where bookmark notes are saved.')
       .addText(text => text
-        .setPlaceholder('x-bookmarks')
+        .setPlaceholder('X-bookmarks')
         .setValue(this.plugin.settings.defaultFolder)
         .onChange(async (value) => {
           const trimmed = value.trim().replace(/^\/+|\/+$/g, '');
@@ -63,7 +63,7 @@ export class XBookmarksSyncSettingTab extends PluginSettingTab {
       const tagInput = inputRow.createEl('input', { type: 'text', cls: 'x-bms-tag-input' });
       tagInput.placeholder = 'Add tag\u2026';
 
-      inputRow.createEl('span', { text: 'Press Enter to add', cls: 'x-bms-tag-hint' });
+      inputRow.createEl('span', { text: 'Press enter to add', cls: 'x-bms-tag-hint' });
 
       tagInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;

@@ -29,7 +29,7 @@ export class XBookmarksView extends ItemView {
     return VIEW_TYPE;
   }
   getDisplayText() {
-    return 'X Bookmarks';
+    return 'X bookmarks';
   }
   getIcon() {
     return 'x-bookmarks-sync';
@@ -56,7 +56,7 @@ export class XBookmarksView extends ItemView {
 
     const btnGroup = toolbar.createDiv({ cls: 'x-bookmarks-btn-group' });
 
-    this.copyBtn = btnGroup.createEl('button', { text: 'Copy as MD', cls: 'mod-cta' });
+    this.copyBtn = btnGroup.createEl('button', { text: 'Copy as Markdown', cls: 'mod-cta' });
     this.copyBtn.addClass('is-hidden');
     this.copyBtn.onclick = async () => {
       await this.copyAsMarkdown();
@@ -75,7 +75,7 @@ export class XBookmarksView extends ItemView {
     this.syncFromLastLabel.createSpan({ text: 'Sync from last' });
 
     this.extractBtn = btnGroup.createEl('button', {
-      text: 'Extract Bookmarks',
+      text: 'Extract bookmarks',
       cls: 'mod-cta'
     });
     this.extractBtn.addClass('is-hidden');
@@ -214,7 +214,7 @@ export class XBookmarksView extends ItemView {
         : 'Will scroll through all bookmarks';
       this.hintSpan.setText(hint);
       this.extractBtn.toggleClass('is-hidden', false);
-      this.extractBtn.innerText = 'Extract Bookmarks';
+      this.extractBtn.innerText = 'Extract bookmarks';
       this.extractBtn.onclick = async () => { await this.autoScrollAndExtract(); };
       this.copyBtn.toggleClass('is-hidden', true);
       if (this.syncFromLastLabel) this.syncFromLastLabel.toggleClass('is-hidden', false);
@@ -228,7 +228,7 @@ export class XBookmarksView extends ItemView {
 
   async copyAsMarkdown() {
     if (!this.webview) return;
-    new Notice('Extracting content with Defuddle...');
+    new Notice('Extracting page content\u2026');
 
     try {
       const html = await this.webview.executeJavaScript(

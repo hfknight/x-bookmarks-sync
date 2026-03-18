@@ -18,7 +18,7 @@ export class BookmarkSelectionModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl('h2', { text: 'Select Bookmarks to Import' });
+    contentEl.createEl('h2', { text: 'Select bookmarks to import' });
 
     const listContainer = contentEl.createDiv({ cls: 'bookmark-list-container' });
 
