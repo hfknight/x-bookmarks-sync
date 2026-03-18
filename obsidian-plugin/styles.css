@@ -148,3 +148,8 @@
   height: calc(100% - 50px);
   background-color: #fff;
 }
+
+.x-bookmarks-webview {
+  width: 100%;
+  height: 100%;
+}

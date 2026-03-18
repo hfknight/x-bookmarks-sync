@@ -92,8 +92,7 @@ export class XBookmarksView extends ItemView {
 
     this.webview = document.createElement('webview');
     this.webview.setAttribute('src', this.currentUrl);
-    this.webview.style.width = '100%';
-    this.webview.style.height = '100%';
+    this.webview.classList.add('x-bookmarks-webview');
 
     this.webview.addEventListener('did-navigate', (e: any) => {
       this.currentUrl = e.url;

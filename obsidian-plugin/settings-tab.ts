@@ -12,7 +12,6 @@ export class XBookmarksSyncSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName('X Bookmarks Sync').setHeading();
     new Setting(containerEl)
       .setName('Default folder')
       .setDesc('Vault folder where bookmark notes are saved.')
@@ -36,7 +35,7 @@ export class XBookmarksSyncSettingTab extends PluginSettingTab {
       .setDesc('Tags applied to every imported bookmark note.');
 
     tagSetting.settingEl.addClass('x-bms-tag-setting');
-    tagSetting.controlEl.style.display = 'none'; // suppresses Obsidian's built-in control element structurally
+    tagSetting.controlEl.addClass('is-hidden');
 
     const chipsContainer = tagSetting.settingEl.createDiv({ cls: 'x-bms-chips-container' });
 
