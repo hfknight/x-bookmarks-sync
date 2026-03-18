@@ -78,6 +78,7 @@ export class XBookmarksView extends ItemView {
       text: 'Extract Bookmarks',
       cls: 'mod-cta'
     });
+    this.extractBtn.addClass('is-hidden');
 
     this.closeBtn = btnGroup.createEl('button');
     this.closeBtn.setAttribute('title', 'Close');
