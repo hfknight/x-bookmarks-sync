@@ -44,3 +44,73 @@
   justify-content: flex-end;
   gap: 10px;
 }
+
+/* ── Settings Tab ────────────────────────────────────────────────────── */
+.x-bms-tag-setting {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.x-bms-chips-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.x-bms-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--tag-padding-y, 2px) var(--tag-padding-x, 8px);
+  border-radius: var(--tag-radius, 12px);
+  border: var(--tag-border-width, 1px) solid var(--tag-border-color, var(--background-modifier-border));
+  font-size: 0.85em;
+  background-color: var(--tag-background, var(--background-secondary));
+  color: var(--tag-color, var(--text-normal));
+}
+
+.x-bms-tag-remove-btn {
+  all: unset;
+  cursor: pointer;
+  font-size: 1em;
+  line-height: 1;
+  color: var(--tag-color, var(--text-muted));
+  opacity: 0.6;
+  padding-left: 3px;
+  display: flex;
+  align-items: center;
+}
+
+.x-bms-tag-remove-btn:hover {
+  opacity: 1;
+}
+
+.x-bms-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.x-bms-input-row--with-tags {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.x-bms-tag-input {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.85em;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  width: 140px;
+  outline: none;
+}
+
+.x-bms-tag-hint {
+  color: var(--text-muted);
+  font-size: 0.8em;
+}
