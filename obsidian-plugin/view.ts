@@ -35,7 +35,7 @@ export class XBookmarksView extends ItemView {
     return 'x-bookmarks-sync';
   }
 
-  async onOpen() {
+  onOpen(): Promise<void> {
     this.isScrolling = false;
     this.cancelRequested = false;
     // If opened via protocol handler with a specific URL, use it as the initial URL
@@ -201,6 +201,7 @@ export class XBookmarksView extends ItemView {
 
     webviewContainer.appendChild(this.webview);
     this.updateToolbar();
+    return Promise.resolve();
   }
 
   updateToolbar() {
