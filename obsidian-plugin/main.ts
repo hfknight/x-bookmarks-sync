@@ -14,7 +14,7 @@ export default class XBookmarksSync extends Plugin {
   pendingOpenUrl: string | null = null;
 
   async onload() {
-    const data = await this.loadData();
+    const data = (await this.loadData()) as Partial<XBookmarksSyncData> | null;
     this.settings = {
       importedIds: data?.importedIds ?? [],
       defaultFolder: data?.defaultFolder ?? 'x-bookmarks',

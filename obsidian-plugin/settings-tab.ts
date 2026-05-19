@@ -43,7 +43,7 @@ export class XBookmarksSyncSettingTab extends PluginSettingTab {
       chipsContainer.empty();
 
       for (const tag of this.plugin.settings.defaultTags) {
-        const chip = chipsContainer.createEl('span', { cls: 'x-bms-tag-chip' });
+        const chip = chipsContainer.createSpan({ cls: 'x-bms-tag-chip' });
         chip.createSpan({ text: tag });
 
         const removeBtn = chip.createEl('button', { cls: 'x-bms-tag-remove-btn' });
@@ -63,7 +63,7 @@ export class XBookmarksSyncSettingTab extends PluginSettingTab {
       const tagInput = inputRow.createEl('input', { type: 'text', cls: 'x-bms-tag-input' });
       tagInput.placeholder = 'Add tag\u2026';
 
-      inputRow.createEl('span', { text: 'Press enter to add', cls: 'x-bms-tag-hint' });
+      inputRow.createSpan({ text: 'Press enter to add', cls: 'x-bms-tag-hint' });
 
       tagInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;

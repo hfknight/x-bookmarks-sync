@@ -59,11 +59,11 @@ export class BookmarkSelectionModal extends Modal {
         text: `${bookmark.name} (${bookmark.username})`
       });
       textDiv.createEl('br');
-      textDiv.createEl('span', { text: title, cls: 'text-muted' });
+      textDiv.createSpan({ text: title, cls: 'text-muted' });
 
       if (isImported) {
         textDiv.createEl('br');
-        textDiv.createEl('span', { text: 'Already imported', cls: 'bookmark-item-badge' });
+        textDiv.createSpan({ text: 'Already imported', cls: 'bookmark-item-badge' });
       }
     });
 

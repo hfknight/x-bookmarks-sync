@@ -65,7 +65,7 @@ export class XBookmarksView extends ItemView {
     // Toolbar
     const toolbar = container.createDiv({ cls: 'x-bookmarks-toolbar' });
 
-    this.hintSpan = toolbar.createEl('span', { cls: 'text-muted x-bookmarks-toolbar-hint' });
+    this.hintSpan = toolbar.createSpan({ cls: 'text-muted x-bookmarks-toolbar-hint' });
 
     const btnGroup = toolbar.createDiv({ cls: 'x-bookmarks-btn-group' });
 
@@ -103,9 +103,10 @@ export class XBookmarksView extends ItemView {
     // Webview wrapper
     const webviewContainer = container.createDiv({ cls: 'x-bookmarks-webview-container' });
 
-    this.webview = document.createElement('webview') as unknown as ElectronWebview;
-    this.webview.setAttribute('src', this.currentUrl);
-    this.webview.classList.add('x-bookmarks-webview');
+    this.webview = webviewContainer.createEl('webview' as keyof HTMLElementTagNameMap, {
+      cls: 'x-bookmarks-webview',
+      attr: { src: this.currentUrl },
+    }) as unknown as ElectronWebview;
 
     this.webview.addEventListener('did-navigate', (e: Event & { url: string }) => {
       this.currentUrl = e.url;
@@ -212,7 +213,6 @@ export class XBookmarksView extends ItemView {
       `).catch(() => {});
     });
 
-    webviewContainer.appendChild(this.webview);
     this.updateToolbar();
     return Promise.resolve();
   }
@@ -332,7 +332,7 @@ export class XBookmarksView extends ItemView {
   private async pollFlag(): Promise<boolean> {
     const start = Date.now();
     while (Date.now() - start < 3000) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => activeWindow.setTimeout(resolve, 100));
       try {
         const val = await this.webview!.executeJavaScript('window.__newTweetsAppeared') as boolean;
         if (val) return true;
@@ -377,7 +377,7 @@ export class XBookmarksView extends ItemView {
       // cursor from page 1. Reusing the existing page state causes X to serve
       // from its client-side cache which may have missed some bookmark pages.
       this.webview.setAttribute('src', 'https://x.com/i/bookmarks');
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => activeWindow.setTimeout(resolve, 1500));
 
       // Reset observer state — authoritative reset for this run
       await this.webview.executeJavaScript('window.__newTweetsAppeared = false; window.__xbsCollected = {}; window.__xbsObserverInstalled = false;');
@@ -449,7 +449,7 @@ export class XBookmarksView extends ItemView {
         let stableMs = 0;
         const deadline = Date.now() + 20000;
         while (stableMs < 500 && Date.now() < deadline) {
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => activeWindow.setTimeout(resolve, 200));
           try {
             const count = await this.webview.executeJavaScript(
               `document.querySelectorAll('article[data-testid="tweet"]').length`
@@ -525,7 +525,7 @@ export class XBookmarksView extends ItemView {
         // Wait for new tweets or timeout, then an extra settling delay so the
         // full batch (not just the first tweet) finishes rendering before we extract
         await this.pollFlag();
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => activeWindow.setTimeout(resolve, 500));
 
         // Primary: merge tweets captured by the observer the instant they entered the DOM
         // (immune to virtual-list unmounting that can happen before DOM extraction runs)
@@ -611,7 +611,7 @@ export class XBookmarksView extends ItemView {
             });
           } catch(e) { return '{"observer":[],"api":[]}'; }
         })()`) as string;
-        const finalSources = finalJson ? JSON.parse(finalJson) : { observer: [], api: [] };
+        const finalSources = (finalJson ? JSON.parse(finalJson) : { observer: [], api: [] }) as { observer: Tweet[]; api: Tweet[] };
         if (finalSources) {
           for (const tweet of [...(finalSources.observer || []), ...(finalSources.api || [])]) {
             if (!this.collectedBookmarks.has(tweet.id)) {
