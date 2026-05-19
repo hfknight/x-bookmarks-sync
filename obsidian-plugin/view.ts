@@ -65,17 +65,9 @@ export class XBookmarksView extends ItemView {
     // Toolbar
     const toolbar = container.createDiv({ cls: 'x-bookmarks-toolbar' });
 
-    this.hintSpan = toolbar.createSpan({ cls: 'text-muted x-bookmarks-toolbar-hint' });
+    const leftGroup = toolbar.createDiv({ cls: 'x-bookmarks-toolbar-left' });
 
-    const btnGroup = toolbar.createDiv({ cls: 'x-bookmarks-btn-group' });
-
-    this.copyBtn = btnGroup.createEl('button', { text: 'Copy as Markdown', cls: 'mod-cta' });
-    this.copyBtn.addClass('is-hidden');
-    this.copyBtn.onclick = async () => {
-      await this.copyAsMarkdown();
-    };
-
-    this.syncFromLastLabel = btnGroup.createEl('label', { cls: 'x-bookmarks-sync-label' });
+    this.syncFromLastLabel = leftGroup.createEl('label', { cls: 'x-bookmarks-sync-label' });
     this.syncFromLastCheckbox = this.syncFromLastLabel.createEl('input', { type: 'checkbox' });
     // Default to unchecked (full sync) if user has never imported any bookmarks
     const hasImported = this.plugin.importedIds.size > 0;
@@ -86,6 +78,16 @@ export class XBookmarksView extends ItemView {
       this.updateToolbar();
     };
     this.syncFromLastLabel.createSpan({ text: 'Sync from last' });
+
+    this.hintSpan = leftGroup.createSpan({ cls: 'text-muted x-bookmarks-toolbar-hint' });
+
+    const btnGroup = toolbar.createDiv({ cls: 'x-bookmarks-btn-group' });
+
+    this.copyBtn = btnGroup.createEl('button', { text: 'Copy as Markdown', cls: 'mod-cta' });
+    this.copyBtn.addClass('is-hidden');
+    this.copyBtn.onclick = async () => {
+      await this.copyAsMarkdown();
+    };
 
     this.extractBtn = btnGroup.createEl('button', {
       text: 'Extract bookmarks',
@@ -222,9 +224,7 @@ export class XBookmarksView extends ItemView {
     if (this.isScrolling) return; // don't clobber scrolling state
 
     if (this.currentUrl.includes('/bookmarks')) {
-      const hint = this.incrementalMode
-        ? 'Will stop when reaching already-imported bookmarks'
-        : 'Will scroll through all bookmarks';
+      const hint = this.incrementalMode ? 'Incremental' : 'Full scan';
       this.hintSpan.setText(hint);
       this.extractBtn.toggleClass('is-hidden', false);
       this.extractBtn.innerText = 'Extract bookmarks';

@@ -129,8 +129,15 @@
   background-color: var(--background-secondary);
 }
 
+.x-bookmarks-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .x-bookmarks-toolbar-hint {
-  font-size: var(--font-smaller);
+  font-size: var(--font-smallest);
+  font-style: italic;
   white-space: nowrap;
 }
 
