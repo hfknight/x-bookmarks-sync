@@ -319,15 +319,23 @@ export default class XBookmarksSync extends Plugin {
   private async maybeShowWhatsNew() {
     const current = this.manifest.version;
     const last = this.settings.lastShownVersion;
+    const isExistingUser = this.importedIds.size > 0;
 
     this.settings.lastShownVersion = current;
     await this.saveSettings();
 
-    // Skip on fresh install (no prior version recorded) and on no-op reloads.
-    if (!last || last === current) return;
+    // No-op reload: same version we already showed for.
+    if (last === current) return;
+
+    // Fresh install (no prior version, no imported bookmarks) — stay quiet.
+    if (!last && !isExistingUser) return;
+
+    // Existing user with no recorded version (upgrading from a release that
+    // predates this feature): show the full window from the earliest entry.
+    const from = last ?? '0.0.0';
 
     const changelog = parseChangelog(changelogText);
-    const body = notesSince(changelog, last, current);
+    const body = notesSince(changelog, from, current);
     if (!body) return;
 
     new WhatsNewModal(this.app, this, body).open();

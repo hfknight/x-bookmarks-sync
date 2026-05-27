@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3
+
+- Existing users now see the What's new modal on their first upgrade after the modal landed (1.1.2 reached them silently).
+
 ## 1.1.2
 
 - **What's new modal** — see a summary of changes after the plugin updates.
