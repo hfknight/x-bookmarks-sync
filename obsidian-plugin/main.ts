@@ -242,6 +242,7 @@ export default class XBookmarksSync extends Plugin {
   async fetchArticleByHiddenWebview(url: string): Promise<FetchArticleResult> {
     const container = document.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
     const webview = container.createEl('webview' as keyof HTMLElementTagNameMap, {
+      cls: 'x-bookmarks-hidden-webview-frame',
       attr: { src: url },
     }) as unknown as ElectronWebview;
 

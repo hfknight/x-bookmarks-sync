@@ -177,7 +177,7 @@
   z-index: -1;
 }
 
-.x-bookmarks-hidden-webview webview {
+.x-bookmarks-hidden-webview-frame {
   width: 100%;
   height: 100%;
 }
