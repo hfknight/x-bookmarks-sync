@@ -42,7 +42,7 @@ export default class XBookmarksSync extends Plugin {
       lastShownVersion: data?.lastShownVersion ?? null,
     };
     this.importedIds = new Set(this.settings.importedIds);
-    this.maybeShowWhatsNew();
+    await this.maybeShowWhatsNew();
 
     addIcon('x-bookmarks-sync', `<path d="M 50 16.67 A 33.33 33.33 0 0 1 73.75 73.75 M 73.75 52.92 V 73.75 H 94.58" stroke="currentColor" stroke-width="8.33" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M 50 83.33 A 33.33 33.33 0 0 1 26.25 26.25 M 26.25 47.08 V 26.25 H 5.42" stroke="currentColor" stroke-width="8.33" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M 60.42 33.75 H 65.83 L 53.75 47.5 L 67.92 66.25 H 57.08 L 48.75 55 L 38.33 66.25 H 32.92 L 45.42 51.67 L 32.08 33.75 H 42.92 L 50.42 44.17 Z" fill="currentColor" stroke="none"/>`);
 
@@ -294,15 +294,12 @@ export default class XBookmarksSync extends Plugin {
     }
   }
 
-  private maybeShowWhatsNew() {
+  private async maybeShowWhatsNew() {
     const current = this.manifest.version;
     const last = this.settings.lastShownVersion;
 
-    // Fire-and-forget the version write so onload returns quickly.
-    void (async () => {
-      this.settings.lastShownVersion = current;
-      await this.saveSettings();
-    })();
+    this.settings.lastShownVersion = current;
+    await this.saveSettings();
 
     // Skip on fresh install (no prior version recorded) and on no-op reloads.
     if (!last || last === current) return;
