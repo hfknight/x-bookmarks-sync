@@ -102,6 +102,20 @@ Need to refresh a single note (for example, you imported it before long-tweet su
 
 ---
 
+## Commands & menu items reference
+
+| Action | Right-click in bookmark note | Command palette | Toolbar button (X bookmarks view) |
+|---|---|---|---|
+| Open the X bookmarks view | — | **Open X bookmarks view** | — |
+| Sync bookmarks from the bookmarks page | — | — | **Extract bookmarks** (visible on `/i/bookmarks`) |
+| Copy the focal tweet/article to clipboard | — | — | **Copy main content** (visible on any non-bookmarks X page) |
+| Import the article body into the bookmark note | **Import X article body** | **Import X article body to current note** | **Import article** (visible on `/status/` or `/article/` pages) |
+| Re-import a single bookmark on the next sync | **Re-import this bookmark on next sync** | **Re-import this bookmark on next sync** | — |
+
+The right-click menu items only appear on bookmark notes — that is, notes whose YAML frontmatter contains an X URL (`url:` or `article_url:`).
+
+---
+
 ## Settings
 
 Open **Settings → X Bookmarks Sync** to configure:
