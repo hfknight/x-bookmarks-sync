@@ -27,14 +27,23 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 
 ## Installation
 
-### Via BRAT (recommended for early access)
+### From Obsidian's Community Plugins (recommended)
+
+1. Open **Settings → Community plugins**.
+2. Make sure **Restricted mode** is **off**.
+3. Click **Browse** and search for **X Bookmarks Sync**.
+4. Click **Install**, then **Enable**.
+
+### Via BRAT (for pre-release versions)
+
+Use this if you want early access to fixes or features that haven't been published to the community store yet.
 
 1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) from the Obsidian community plugins list.
 2. In BRAT settings, click **Add Beta Plugin** and enter:
    ```
    hfknight/x-bookmarks-sync
    ```
-3. Enable **X Bookmarks Sync** in **Settings → Community Plugins**.
+3. Enable **X Bookmarks Sync** in **Settings → Community plugins**.
 
 ### Manual
 
@@ -43,7 +52,7 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 3. In your vault, navigate to `.obsidian/plugins/` (create the folder if it doesn't exist).
 4. Create a new subfolder named `x-bookmarks-sync`.
 5. Place `main.js` and `manifest.json` inside it.
-6. Restart Obsidian, then go to **Settings → Community Plugins** and enable **X Bookmarks Sync**.
+6. Restart Obsidian, then go to **Settings → Community plugins** and enable **X Bookmarks Sync**.
 
 ### From source
 
@@ -82,10 +91,6 @@ Check **Sync from last** in the toolbar before clicking **Extract Bookmarks**. T
 
 > **First sync:** The checkbox is unchecked by default until you have completed at least one full sync. This ensures your entire bookmark history is captured on the first run.
 
-### Copy main content
-
-While viewing any X page in the webview, click **Copy main content** in the toolbar to copy the focal tweet or article as Markdown to your clipboard. Replies and surrounding thread context are stripped automatically — you get just the post you opened.
-
 ### Import X article body
 
 For bookmarks that point at native X long-form articles (URLs like `x.com/<user>/status/<id>` rendered as an Article), the plugin can pull the full article body into the note. Three entry points:
@@ -99,6 +104,11 @@ If the bookmarked tweet isn't actually an article, the plugin shows a Notice and
 ### Re-import a bookmark
 
 Need to refresh a single note (for example, you imported it before long-tweet support landed)? Right-click in the note's editor → **Re-import this bookmark on next sync** (also in the command palette). The plugin removes the tweet id from import history and moves the file to the system trash; on the next sync the bookmark appears as new in the selection modal.
+
+
+### Copy main content
+
+While viewing any X page in the webview, click **Copy main content** in the toolbar to copy the focal tweet or article as Markdown to your clipboard. Replies and surrounding thread context are stripped automatically — you get just the post you opened.
 
 ---
 
