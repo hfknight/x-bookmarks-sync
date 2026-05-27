@@ -6,6 +6,10 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 
 ---
 
+## What's new in 1.1.1
+
+- **Security patches** — upgraded bundled `defuddle` to 0.18.x (which transitively patches `@xmldom/xmldom`) and `esbuild` to 0.28.x, plus npm overrides for `fast-uri` and `picomatch`. Clears all open Dependabot advisories.
+
 ## What's new in 1.1.0
 
 - **Import X article body** — pull the full body of a bookmarked X long-form article into its note and rename the file to the article title. Right-click in the note, command palette, or toolbar button while viewing the article.
