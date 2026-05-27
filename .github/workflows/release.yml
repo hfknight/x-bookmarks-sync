@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # need history so we can find the previous tag
 
       - name: Use Node.js
         uses: actions/setup-node@v6
@@ -34,10 +36,40 @@ jobs:
             main.js
             styles.css
 
+      - name: Extract release notes from README
+        env:
+          VERSION: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Validate the tag matches a semver-like pattern before using it in
+          # shell/awk constructs. Defensive — git tag names already restrict
+          # most metacharacters, but we never want unexpected input here.
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$'; then
+            echo "Tag '$VERSION' is not semver-like; writing placeholder body"
+            printf 'Release %s\n' "$VERSION" > release_notes.md
+            exit 0
+          fi
+
+          awk -v ver="## What's new in $VERSION" '
+            $0 == ver { capture=1; next }
+            capture && /^## / { exit }
+            capture && /^---[[:space:]]*$/ { exit }
+            capture { print }
+          ' README.md > release_notes.md
+
+          PREV=$(git tag --sort=-version:refname | grep -v "^${VERSION}$" | head -1)
+          if printf '%s' "$PREV" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$'; then
+            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
+              "$REPO" "$PREV" "$VERSION" >> release_notes.md
+          fi
+
+          echo "--- Generated release notes ---"
+          cat release_notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2.6.1
         with:
-          generate_release_notes: true
+          body_path: release_notes.md
           files: |
             main.js
             manifest.json
