@@ -21,4 +21,5 @@ export interface XBookmarksSyncData {
   defaultFolder: string;
   defaultTags: string[];
   lastSyncAt: string | null;
+  lastShownVersion: string | null;
 }

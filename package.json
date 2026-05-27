@@ -4,7 +4,7 @@
   "version": "1.1.1",
   "type": "module",
   "scripts": {
-    "build:plugin": "tsc --noEmit -p obsidian-plugin/tsconfig.json && esbuild obsidian-plugin/main.ts --bundle --format=cjs --target=es2018 --outfile=obsidian-plugin/main.js --external:obsidian --external:electron && node build.cjs",
+    "build:plugin": "tsc --noEmit -p obsidian-plugin/tsconfig.json && esbuild obsidian-plugin/main.ts --bundle --format=cjs --target=es2018 --outfile=obsidian-plugin/main.js --loader:.md=text --external:obsidian --external:electron && node build.cjs",
     "build": "npm run build:plugin",
     "deploy:local": "npm run build:plugin && cp main.js manifest.json styles.css \"/Users/fei.hu/Dropbox/Obsidian Notes/.obsidian/plugins/x-bookmarks-sync/\"",
     "clean": "rm -rf dist-plugin",

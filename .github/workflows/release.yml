@@ -36,7 +36,7 @@ jobs:
             main.js
             styles.css
 
-      - name: Extract release notes from README
+      - name: Extract release notes from CHANGELOG
         env:
           VERSION: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
@@ -50,12 +50,15 @@ jobs:
             exit 0
           fi
 
-          awk -v ver="## What's new in $VERSION" '
-            $0 == ver { capture=1; next }
-            capture && /^## / { exit }
-            capture && /^---[[:space:]]*$/ { exit }
-            capture { print }
-          ' README.md > release_notes.md
+          # Extract the "## <version>" section from CHANGELOG.md
+          : > release_notes.md
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VERSION" '
+              $0 ~ "^## " ver "[[:space:]]*$" { capture=1; next }
+              capture && /^## / { exit }
+              capture { print }
+            ' CHANGELOG.md > release_notes.md
+          fi
 
           # Drop trailing blank lines so we can detect "nothing was extracted"
           sed -i.bak -e :a -e '/^$/{$d;N;ba' -e '}' release_notes.md && rm -f release_notes.md.bak
