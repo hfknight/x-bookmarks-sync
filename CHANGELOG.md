@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.4
+
+- **Re-import now reliably finds the bookmark** — re-importing a single bookmark queues a one-shot full scan on the next sync so it's found even when buried deep in your timeline.
+- **Ribbon icon jumps to bookmarks** — clicking the ribbon icon while the webview shows a tweet now navigates to your bookmarks list so you can extract.
+- **Clearer extraction progress** — shows a "Finalizing" phase while verifying completion, and the selection modal opens noticeably faster for large bookmark sets.
+- **Donate** — support development via Buy Me a Coffee.
+
 ## 1.1.3
 
 - Existing users now see the What's new modal on their first upgrade after the modal landed (1.1.2 reached them silently).
