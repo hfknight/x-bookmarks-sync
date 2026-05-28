@@ -40,8 +40,9 @@ When the user asks to release or publish a new version, do the following steps i
 4. Update `"version"` in `package.json` (root) to match
 5. Add the new version entry to `versions.json`: `"<version>": "<minAppVersion>"`
 6. Run `npm run build:plugin` to verify the build is clean
-7. Commit: `git add CHANGELOG.md manifest.json obsidian-plugin/manifest.json versions.json package.json && git commit -m "Release <version>"`
-8. Tag: `git tag <version>`
-9. Push: `git push origin main --tags`
+7. (Recommended) Push any feature commits, then run a [branch scan](https://community.obsidian.md/) against the latest commit to preview the community review bot. Address any issues before continuing.
+8. Commit: `git add CHANGELOG.md manifest.json obsidian-plugin/manifest.json versions.json package.json && git commit -m "Release <version>"`
+9. Tag: `git tag <version>`
+10. Push: `git push origin main --tags`
 
 GitHub Actions (`.github/workflows/release.yml`) automatically creates the GitHub Release with `main.js`, `manifest.json`, `versions.json`, and a zip archive when the tag is pushed.
