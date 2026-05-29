@@ -30,6 +30,8 @@ Local vault plugin path: `/Users/fei.hu/Dropbox/Obsidian Notes/.obsidian/plugins
 
 Build outputs (`main.js`) are gitignored — distributed via GitHub Releases.
 
+**Plugin dependencies live in the root `package.json`.** `build:plugin` runs from the repo root and esbuild bundles `obsidian-plugin/main.ts`, resolving imports (e.g. `defuddle`) from the **root** `node_modules`. There is no separate install under `obsidian-plugin/` — don't add an `obsidian-plugin/package.json` or lockfile (a stale one drifted and produced false-positive Dependabot alerts; removed in `74b8081`).
+
 ## Release Process
 
 When the user asks to release or publish a new version, do the following steps in order — confirm the version number first if not specified:
