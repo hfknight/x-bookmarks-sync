@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.5
+
+- **Imported articles keep their full title** — importing an X article body now adds the complete article title as a heading at the top of the "Full article" section, so the full title is preserved in the note even when the filename is shortened to 40 characters.
+
 ## 1.1.4
 
 - **Re-import now reliably finds the bookmark** — re-importing a single bookmark queues a one-shot full scan on the next sync so it's found even when buried deep in your timeline.
