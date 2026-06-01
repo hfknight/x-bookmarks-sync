@@ -388,6 +388,18 @@ export class XBookmarksView extends ItemView {
               return { url: String(articleUrl), title: String(title), excerpt: String(excerpt) };
             } catch (e) { return null; }
           }
+
+          function __xbsTweetText(el) {
+            if (!el) return '';
+            let text = el.innerText;
+            for (const a of el.querySelectorAll('a')) {
+              const mangled = a.innerText;
+              const clean = (a.textContent || '').replace(/\\s+/g, '').replace(/…+$/, '');
+              if (clean && mangled && text.indexOf(mangled) !== -1) text = text.replace(mangled, clean);
+            }
+            return text;
+          }
+
           try {
               const tweets = document.querySelectorAll('article[data-testid="tweet"]');
               const results = [];
@@ -395,7 +407,7 @@ export class XBookmarksView extends ItemView {
               tweets.forEach((tweet, idx) => {
                   try {
                       const textEl = tweet.querySelector('[data-testid="tweetText"]');
-                      const text = textEl ? textEl.innerText : '';
+                      const text = __xbsTweetText(textEl);
 
                       const userEl = tweet.querySelector('[data-testid="User-Name"]');
                       const userText = userEl ? userEl.innerText : '';
@@ -550,10 +562,21 @@ export class XBookmarksView extends ItemView {
             } catch (e) { return []; }
           }
 
+          function __xbsTweetText(el) {
+            if (!el) return '';
+            let text = el.innerText;
+            for (const a of el.querySelectorAll('a')) {
+              const mangled = a.innerText;
+              const clean = (a.textContent || '').replace(/\\s+/g, '').replace(/…+$/, '');
+              if (clean && mangled && text.indexOf(mangled) !== -1) text = text.replace(mangled, clean);
+            }
+            return text;
+          }
+
           function __xbsExtractTweet(tweetEl) {
             try {
               const textEl = tweetEl.querySelector('[data-testid="tweetText"]');
-              const text = textEl ? textEl.innerText : '';
+              const text = __xbsTweetText(textEl);
 
               const userEl = tweetEl.querySelector('[data-testid="User-Name"]');
               const userText = userEl ? userEl.innerText : '';
