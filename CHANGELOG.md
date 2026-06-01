@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.6
+
+- **Links in imported tweets no longer break across lines** — a shortened link in a tweet is now saved as a single clickable URL instead of being split into several lines.
+
 ## 1.1.5
 
 - **Imported articles keep their full title** — importing an X article body now adds the complete article title as a heading at the top of the "Full article" section, so the full title is preserved in the note even when the filename is shortened to 40 characters.

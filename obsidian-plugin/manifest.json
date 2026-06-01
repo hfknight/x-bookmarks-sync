@@ -1,7 +1,7 @@
 {
   "id": "x-bookmarks-sync",
   "name": "X Bookmarks Sync",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "minAppVersion": "1.7.2",
   "description": "Save your X (Twitter) bookmarks as structured Markdown notes, with selective import, incremental sync, and no API key needed.",
   "author": "Fei Hu",
