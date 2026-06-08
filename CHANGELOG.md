@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.7
+
+- **Long tweets no longer import with their text cut off** — when X serves only a shortened "Show more" preview of a long tweet during sync, the plugin now pulls the full text from the tweet's own page so the complete body is saved.
+
 ## 1.1.6
 
 - **Links in imported tweets no longer break across lines** — a shortened link in a tweet is now saved as a single clickable URL instead of being split into several lines.
