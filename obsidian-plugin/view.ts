@@ -175,7 +175,7 @@ export class XBookmarksView extends ItemView {
                     var prev = window.__xbsApiCollected[id];
                     // Only replace if the new text is longer (prefer note_tweet over truncated legacy)
                     if (!prev || text.length > String(prev.text || '').length) {
-                      var entry = { id: id, name: String(name || screenName), username: '@' + screenName, text: text, url: url };
+                      var entry = { id: id, name: String(name || screenName), username: '@' + screenName, text: text, url: url, fromNote: !!noteText };
                       if (images.length > 0) entry.images = images;
                       window.__xbsApiCollected[id] = entry;
                     } else if (prev && images.length > (prev.images ? prev.images.length : 0)) {
@@ -289,8 +289,122 @@ export class XBookmarksView extends ItemView {
     if (!existing.username && tweet.username) merged.username = tweet.username;
     if (!existing.article && tweet.article) merged.article = tweet.article;
     if ((tweet.images?.length ?? 0) > (existing.images?.length ?? 0)) merged.images = tweet.images;
+    if (tweet.truncated) merged.truncated = true;
     this.collectedBookmarks.set(tweet.id, merged);
     return false;
+  }
+
+  /**
+   * Backstop for the long-tweet truncation race: when the GraphQL interceptor misses a
+   * tweet's note_tweet body, only X's truncated timeline preview survives the merge. Such
+   * tweets are flagged `truncated` (their article rendered a
+   * [data-testid="tweet-text-show-more-link"] button — a stable, locale-independent marker).
+   * For each, open its /status/ permalink, where the focal tweet is always fully expanded,
+   * and re-read the complete text. Tweets the API already supplied a full note_tweet for
+   * (fromNote) are skipped. Runs after the scroll loop, so it never perturbs the scrape.
+   */
+  private async recoverTruncatedBookmarks(): Promise<void> {
+    if (!this.webview) return;
+
+    // Ids the API interceptor already supplied the full note_tweet body for — these are safe.
+    const safeIds = new Set<string>();
+    try {
+      const safeJson = await this.webview.executeJavaScript(
+        '(function(){ try { return JSON.stringify(Object.values(window.__xbsApiCollected || {}).filter(function(e){return e && e.fromNote;}).map(function(e){return String(e.id);})); } catch(e) { return "[]"; } })()'
+      ) as string;
+      for (const id of JSON.parse(safeJson || '[]') as string[]) safeIds.add(id);
+    } catch { /* webview gone — fall through; candidates may still be empty */ }
+
+    const candidates = Array.from(this.collectedBookmarks.values()).filter(
+      (t) => t.truncated && !safeIds.has(t.id) && /\/status\/\d+/.test(t.url || '')
+    );
+    if (candidates.length === 0) return;
+
+    const MAX_RECOVER = 25;
+    const targets = candidates.slice(0, MAX_RECOVER);
+    if (candidates.length > MAX_RECOVER) {
+      console.warn(`x-bookmarks-sync: ${candidates.length} truncated bookmarks found; recovering the first ${MAX_RECOVER}.`);
+    }
+
+    // Recover in a hidden, off-screen webview (same pattern as the article fetcher) so the
+    // visible bookmarks page never moves — no flicker through each tweet's detail page.
+    const container = document.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
+    const hidden = container.createEl('webview' as keyof HTMLElementTagNameMap, {
+      cls: 'x-bookmarks-hidden-webview-frame',
+      attr: { src: targets[0].url },
+    }) as unknown as ElectronWebview;
+
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const t = targets[i];
+        if (this.hintSpan) this.hintSpan.setText(`Recovering full text… ${i + 1}/${targets.length}`);
+        try {
+          const text = await this.fetchFocalTweetText(hidden, t.url, t.id);
+          if (text && text.length > (t.text || '').length) {
+            this.mergeBookmark({ ...t, text });
+          } else if (!text) {
+            console.warn(`x-bookmarks-sync: could not recover full text for ${t.url} (unavailable or still truncated).`);
+          }
+        } catch (e) {
+          console.warn(`x-bookmarks-sync: recovery failed for ${t.url}:`, e);
+        }
+      }
+    } finally {
+      container.detach();
+    }
+  }
+
+  /**
+   * Navigate the given (hidden) webview to a tweet's permalink and read the focal tweet's full
+   * text via the same anchor-repair logic used during extraction. Returns the complete text, or
+   * null if the page never rendered a complete focal tweet (deleted / protected / age-gated, a
+   * redirect, or a timeout).
+   */
+  private async fetchFocalTweetText(webview: ElectronWebview, url: string, id: string): Promise<string | null> {
+    webview.setAttribute('src', url);
+
+    const script = `
+      (function(id){
+        function __xbsClean(el){
+          if (!el) return '';
+          var text = el.innerText;
+          var anchors = el.querySelectorAll('a');
+          for (var i = 0; i < anchors.length; i++) {
+            var a = anchors[i];
+            var mangled = a.innerText;
+            var clean = (a.textContent || '').replace(/\\s+/g, '').replace(/…+$/, '');
+            if (clean && mangled && text.indexOf(mangled) !== -1) text = text.replace(mangled, clean);
+          }
+          return text;
+        }
+        var href = location.href;
+        var arts = document.querySelectorAll('article[data-testid="tweet"]');
+        var focal = null;
+        for (var i = 0; i < arts.length; i++) {
+          if (arts[i].querySelector('a[href*="/status/' + id + '"]')) { focal = arts[i]; break; }
+        }
+        if (!focal && arts.length) focal = arts[0];
+        if (!focal) return { href: href };
+        // The focal tweet on its own permalink is fully expanded; a lingering show-more
+        // means the page hasn't settled yet — report not-ready so the caller keeps polling.
+        if (focal.querySelector('[data-testid="tweet-text-show-more-link"]')) return { href: href, incomplete: true };
+        var textEl = focal.querySelector('[data-testid="tweetText"]');
+        return { href: href, text: __xbsClean(textEl) };
+      })(${JSON.stringify(id)})
+    `;
+
+    const start = Date.now();
+    while (Date.now() - start < 12000) {
+      await new Promise(resolve => activeWindow.setTimeout(resolve, 300));
+      let res: { href?: string; text?: string; incomplete?: boolean } | null = null;
+      try {
+        res = await webview.executeJavaScript(script) as { href?: string; text?: string; incomplete?: boolean } | null;
+      } catch { continue; } // webview mid-navigation — try again next tick
+      if (res && res.text && res.text.trim()) return res.text;
+      // Bail early if X redirected the page off the permalink (login wall, deleted/protected).
+      if (Date.now() - start > 3000 && res && res.href && !res.href.includes(`/status/${id}`)) break;
+    }
+    return null;
   }
 
   async copyAsMarkdown() {
@@ -427,7 +541,7 @@ export class XBookmarksView extends ItemView {
                       const images = __xbsFindImages(tweet);
 
                       if (text || url || article || images.length > 0) {
-                          const result = { id: String(id), name: String(name), username: String(username), text: String(text), url: String(url) };
+                          const result = { id: String(id), name: String(name), username: String(username), text: String(text), url: String(url), truncated: !!tweet.querySelector('[data-testid="tweet-text-show-more-link"]') };
                           if (article) result.article = article;
                           if (images.length > 0) result.images = images;
                           results.push(result);
@@ -598,7 +712,8 @@ export class XBookmarksView extends ItemView {
               if (id && (text || url || article || images.length > 0)) {
                 const entry = {
                   id: String(id), name: String(name),
-                  username: String(username), text: String(text), url: String(url)
+                  username: String(username), text: String(text), url: String(url),
+                  truncated: !!tweetEl.querySelector('[data-testid="tweet-text-show-more-link"]')
                 };
                 if (article) entry.article = article;
                 if (images.length > 0) entry.images = images;
@@ -809,6 +924,9 @@ export class XBookmarksView extends ItemView {
 
       // After loop
       await this.cleanup();
+      // Recover any bookmarks whose full body the API interceptor missed (X served only the
+      // truncated "Show more" preview). Detected structurally via tweet-text-show-more-link.
+      await this.recoverTruncatedBookmarks();
       this.isScrolling = false;
       if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
       this.updateToolbar();

@@ -14,6 +14,9 @@ export interface Tweet {
   url: string;
   article?: ArticleCard;
   images?: string[];
+  // DOM showed a "Show more" affordance for this tweet — its extracted text is X's
+  // truncated timeline preview, not the full body. Used to drive the recovery backstop.
+  truncated?: boolean;
 }
 
 export interface XBookmarksSyncData {
