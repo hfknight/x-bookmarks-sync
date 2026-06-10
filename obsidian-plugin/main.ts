@@ -185,7 +185,7 @@ export default class XBookmarksSync extends Plugin {
     this.importedIds.delete(id);
     this.settings.forceFullScanOnNextSync = true;
     await this.saveSettings();
-    await this.app.vault.trash(file, true);
+    await this.app.fileManager.trashFile(file);
     new Notice('Bookmark removed. Next sync will do a full scan to find it.');
   }
 
@@ -282,7 +282,7 @@ export default class XBookmarksSync extends Plugin {
   }
 
   async fetchArticleByHiddenWebview(url: string): Promise<FetchArticleResult> {
-    const container = document.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
+    const container = activeDocument.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
     const webview = container.createEl('webview' as keyof HTMLElementTagNameMap, {
       cls: 'x-bookmarks-hidden-webview-frame',
       attr: { src: url },
@@ -290,12 +290,12 @@ export default class XBookmarksSync extends Plugin {
 
     try {
       await new Promise<void>((resolve) => {
-        const timeout = activeWindow.setTimeout(() => {
+        const timeout = window.setTimeout(() => {
           webview.removeEventListener('did-finish-load', handler);
           resolve();
         }, 30000);
         const handler = () => {
-          activeWindow.clearTimeout(timeout);
+          window.clearTimeout(timeout);
           webview.removeEventListener('did-finish-load', handler);
           resolve();
         };
@@ -303,7 +303,7 @@ export default class XBookmarksSync extends Plugin {
       });
 
       // Extra settle delay so React finishes rendering article body
-      await new Promise(resolve => activeWindow.setTimeout(resolve, 2000));
+      await new Promise(resolve => window.setTimeout(resolve, 2000));
 
       // If X redirected us off /article/, this tweet has no article body
       const finalUrl = await webview.executeJavaScript('window.location.href') as string;

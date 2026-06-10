@@ -45,7 +45,7 @@ export class BookmarkSelectionModal extends Modal {
     // second runs before the paint AFTER that — guaranteeing one paint cycle
     // happened with the placeholder on screen before the synchronous forEach
     // blocks the main thread.
-    activeWindow.requestAnimationFrame(() => activeWindow.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
       let newCount = 0;
       this.bookmarks.forEach((bookmark) => {
         const isImported = this.plugin.isTweetImported(bookmark);

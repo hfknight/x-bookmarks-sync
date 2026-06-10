@@ -336,7 +336,7 @@ export class XBookmarksView extends ItemView {
 
     // Recover in a hidden, off-screen webview (same pattern as the article fetcher) so the
     // visible bookmarks page never moves — no flicker through each tweet's detail page.
-    const container = document.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
+    const container = activeDocument.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
     const hidden = container.createEl('webview' as keyof HTMLElementTagNameMap, {
       cls: 'x-bookmarks-hidden-webview-frame',
       attr: { src: targets[0].url },
@@ -403,7 +403,7 @@ export class XBookmarksView extends ItemView {
 
     const start = Date.now();
     while (Date.now() - start < 12000) {
-      await new Promise(resolve => activeWindow.setTimeout(resolve, 300));
+      await new Promise(resolve => window.setTimeout(resolve, 300));
       let res: { href?: string; text?: string; incomplete?: boolean } | null = null;
       try {
         res = await webview.executeJavaScript(script) as { href?: string; text?: string; incomplete?: boolean } | null;
@@ -579,7 +579,7 @@ export class XBookmarksView extends ItemView {
   private async pollFlag(): Promise<boolean> {
     const start = Date.now();
     while (Date.now() - start < 3000) {
-      await new Promise(resolve => activeWindow.setTimeout(resolve, 100));
+      await new Promise(resolve => window.setTimeout(resolve, 100));
       try {
         const val = await this.webview!.executeJavaScript('window.__newTweetsAppeared') as boolean;
         if (val) return true;
@@ -632,7 +632,7 @@ export class XBookmarksView extends ItemView {
       // cursor from page 1. Reusing the existing page state causes X to serve
       // from its client-side cache which may have missed some bookmark pages.
       this.webview.setAttribute('src', 'https://x.com/i/bookmarks');
-      await new Promise(resolve => activeWindow.setTimeout(resolve, 1500));
+      await new Promise(resolve => window.setTimeout(resolve, 1500));
 
       // Reset observer state — authoritative reset for this run
       await this.webview.executeJavaScript('window.__newTweetsAppeared = false; window.__xbsCollected = {}; window.__xbsObserverInstalled = false;');
@@ -763,7 +763,7 @@ export class XBookmarksView extends ItemView {
         let stableMs = 0;
         const deadline = Date.now() + 20000;
         while (stableMs < 500 && Date.now() < deadline) {
-          await new Promise(resolve => activeWindow.setTimeout(resolve, 200));
+          await new Promise(resolve => window.setTimeout(resolve, 200));
           try {
             const count = await this.webview.executeJavaScript(
               `document.querySelectorAll('article[data-testid="tweet"]').length`
@@ -841,7 +841,7 @@ export class XBookmarksView extends ItemView {
         // Wait for new tweets or timeout, then an extra settling delay so the
         // full batch (not just the first tweet) finishes rendering before we extract
         await this.pollFlag();
-        await new Promise(resolve => activeWindow.setTimeout(resolve, 500));
+        await new Promise(resolve => window.setTimeout(resolve, 500));
 
         // Primary: merge tweets captured by the observer the instant they entered the DOM
         // (immune to virtual-list unmounting that can happen before DOM extraction runs)
@@ -957,7 +957,7 @@ export class XBookmarksView extends ItemView {
       }
       // Yield so the "Preparing…" text actually paints before the modal's synchronous
       // DOM build (300+ items) takes the main thread again.
-      await new Promise(resolve => activeWindow.setTimeout(resolve, 16));
+      await new Promise(resolve => window.setTimeout(resolve, 16));
 
       const modal = new BookmarkSelectionModal(
         this.app,
