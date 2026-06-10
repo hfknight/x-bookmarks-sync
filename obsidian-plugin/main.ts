@@ -454,6 +454,15 @@ export default class XBookmarksSync extends Plugin {
       ? '\n\n' + tweet.images.map(u => `![](${u})`).join('\n')
       : '';
 
+    // Videos/GIFs: clickable poster thumbnail opens the tweet (X media URLs aren't
+    // reliably embeddable, so we link out rather than hotlink the stream). The ▶ marks
+    // it as a video so it isn't mistaken for a photo; the footer "View on X" covers navigation.
+    const videosSection = tweet.videoPosters && tweet.videoPosters.length > 0
+      ? '\n\n' + tweet.videoPosters
+        .map(u => `▶ Video\n\n[![](${u})](${tweet.url})`)
+        .join('\n\n')
+      : '';
+
     return `---
 id: ${safeId}
 author: ${safeAuthor}
@@ -465,7 +474,7 @@ tags: [${this.settings.defaultTags.join(', ')}]
 
 # Tweet by ${tweet.name} (${tweet.username})
 
-${tweet.text}${imagesSection}${articleSection}
+${tweet.text}${imagesSection}${videosSection}${articleSection}
 
 [View on X](${tweet.url}) | [Open in Obsidian Webview](obsidian://x-bookmarks?url=${encodeURIComponent(tweet.url)})
 `;

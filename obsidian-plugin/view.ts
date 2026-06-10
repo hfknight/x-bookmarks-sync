@@ -158,17 +158,22 @@ export class XBookmarksView extends ItemView {
                     var noteText = obj.note_tweet && obj.note_tweet.note_tweet_results && obj.note_tweet.note_tweet_results.result && obj.note_tweet.note_tweet_results.result.text;
                     var text = String(noteText || (obj.legacy && (obj.legacy.full_text || obj.legacy.text)) || '');
                     var url = 'https://x.com/' + screenName + '/status/' + id;
-                    // Photo URLs from extended_entities (preferred) or entities.media
+                    // Photo URLs + video/gif poster frames from extended_entities (preferred) or entities.media
                     var images = [];
+                    var videoPosters = [];
                     try {
                       var mediaArr = (obj.legacy && obj.legacy.extended_entities && obj.legacy.extended_entities.media)
                         || (obj.legacy && obj.legacy.entities && obj.legacy.entities.media)
                         || [];
                       for (var mi = 0; mi < mediaArr.length; mi++) {
                         var m = mediaArr[mi];
-                        if (m && m.type === 'photo' && m.media_url_https) {
+                        if (m && m.media_url_https) {
                           var base = String(m.media_url_https).split('?')[0];
-                          images.push(base + '?format=jpg&name=large');
+                          if (m.type === 'photo') {
+                            images.push(base + '?format=jpg&name=large');
+                          } else if (m.type === 'video' || m.type === 'animated_gif') {
+                            videoPosters.push(base + '?format=jpg&name=large');
+                          }
                         }
                       }
                     } catch (e) {}
@@ -177,9 +182,11 @@ export class XBookmarksView extends ItemView {
                     if (!prev || text.length > String(prev.text || '').length) {
                       var entry = { id: id, name: String(name || screenName), username: '@' + screenName, text: text, url: url, fromNote: !!noteText };
                       if (images.length > 0) entry.images = images;
+                      if (videoPosters.length > 0) entry.videoPosters = videoPosters;
                       window.__xbsApiCollected[id] = entry;
-                    } else if (prev && images.length > (prev.images ? prev.images.length : 0)) {
-                      prev.images = images;
+                    } else if (prev) {
+                      if (images.length > (prev.images ? prev.images.length : 0)) prev.images = images;
+                      if (videoPosters.length > (prev.videoPosters ? prev.videoPosters.length : 0)) prev.videoPosters = videoPosters;
                     }
                   }
                 }
@@ -289,6 +296,7 @@ export class XBookmarksView extends ItemView {
     if (!existing.username && tweet.username) merged.username = tweet.username;
     if (!existing.article && tweet.article) merged.article = tweet.article;
     if ((tweet.images?.length ?? 0) > (existing.images?.length ?? 0)) merged.images = tweet.images;
+    if ((tweet.videoPosters?.length ?? 0) > (existing.videoPosters?.length ?? 0)) merged.videoPosters = tweet.videoPosters;
     if (tweet.truncated) merged.truncated = true;
     this.collectedBookmarks.set(tweet.id, merged);
     return false;

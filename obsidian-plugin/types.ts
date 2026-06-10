@@ -14,6 +14,9 @@ export interface Tweet {
   url: string;
   article?: ArticleCard;
   images?: string[];
+  // Poster-frame image URLs for video / animated_gif media (captured from the API,
+  // rendered as a clickable thumbnail that links out to the tweet).
+  videoPosters?: string[];
   // DOM showed a "Show more" affordance for this tweet — its extracted text is X's
   // truncated timeline preview, not the full body. Used to drive the recovery backstop.
   truncated?: boolean;
