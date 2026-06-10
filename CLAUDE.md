@@ -48,4 +48,4 @@ When the user asks to release or publish a new version, do the following steps i
 9. Tag: `git tag <version>`
 10. Push: `git push origin main --tags`
 
-GitHub Actions (`.github/workflows/release.yml`) automatically creates the GitHub Release with `main.js`, `manifest.json`, `versions.json`, and a zip archive when the tag is pushed.
+GitHub Actions (`.github/workflows/release.yml`) automatically creates the GitHub Release with `main.js`, `manifest.json`, and `styles.css` when the tag is pushed. (`versions.json` is not a release asset — Obsidian reads it from the repo root to resolve minAppVersion compatibility.)
