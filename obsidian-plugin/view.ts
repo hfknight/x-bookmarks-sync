@@ -1,10 +1,18 @@
-import { ItemView, WorkspaceLeaf, Notice, setIcon } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Notice, setIcon, requestUrl } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import type XBookmarksSync from './main';
 import { BookmarkSelectionModal } from './modal';
 import { VIEW_TYPE, Tweet } from './types';
 
 const TWEET_OR_ARTICLE_URL = /\/(?:status|article)\/\d+/;
+
+// Minimal shape of X's public syndication response (cdn.syndication.twimg.com) — only the
+// media fields we read for poster recovery.
+interface SyndicationMedia { type?: string; media_url_https?: string; }
+interface SyndicationTweet {
+  mediaDetails?: SyndicationMedia[];
+  quoted_tweet?: { mediaDetails?: SyndicationMedia[] };
+}
 
 interface ElectronWebview extends HTMLElement {
   executeJavaScript(code: string): Promise<unknown>;
@@ -137,7 +145,17 @@ export class XBookmarksView extends ItemView {
       // Install network interceptors early — dom-ready fires before X's React bundle runs,
       // so our patches are in place before X stores any method references.
       // Intercept both fetch and XHR since it's unclear which X uses.
-      this.webview!.executeJavaScript(`
+      void this.webview!.executeJavaScript(this.getInterceptorScript()).catch(() => {});
+    });
+
+    this.updateToolbar();
+    return Promise.resolve();
+  }
+
+  // The fetch/XHR network interceptor installed on the main webview's dom-ready: it captures
+  // tweet text/photos/video posters from X's GraphQL responses into __xbsApiCollected.
+  private getInterceptorScript(): string {
+    return `
         if (!window.__xbsIntercepted) {
           window.__xbsIntercepted = true;
           window.__xbsApiCollected = {};
@@ -181,8 +199,12 @@ export class XBookmarksView extends ItemView {
                     // Only replace if the new text is longer (prefer note_tweet over truncated legacy)
                     if (!prev || text.length > String(prev.text || '').length) {
                       var entry = { id: id, name: String(name || screenName), username: '@' + screenName, text: text, url: url, fromNote: !!noteText };
-                      if (images.length > 0) entry.images = images;
-                      if (videoPosters.length > 0) entry.videoPosters = videoPosters;
+                      // Never drop media a prior response already captured: a note_tweet
+                      // expansion often carries longer text but no extended_entities.
+                      var keepImages = images.length > 0 ? images : (prev && prev.images) || [];
+                      var keepPosters = videoPosters.length > 0 ? videoPosters : (prev && prev.videoPosters) || [];
+                      if (keepImages.length > 0) entry.images = keepImages;
+                      if (keepPosters.length > 0) entry.videoPosters = keepPosters;
                       window.__xbsApiCollected[id] = entry;
                     } else if (prev) {
                       if (images.length > (prev.images ? prev.images.length : 0)) prev.images = images;
@@ -252,11 +274,7 @@ export class XBookmarksView extends ItemView {
           };
         }
         void 0;
-      `).catch(() => {});
-    });
-
-    this.updateToolbar();
-    return Promise.resolve();
+      `;
   }
 
   updateToolbar() {
@@ -298,6 +316,7 @@ export class XBookmarksView extends ItemView {
     if ((tweet.images?.length ?? 0) > (existing.images?.length ?? 0)) merged.images = tweet.images;
     if ((tweet.videoPosters?.length ?? 0) > (existing.videoPosters?.length ?? 0)) merged.videoPosters = tweet.videoPosters;
     if (tweet.truncated) merged.truncated = true;
+    if (tweet.hasVideo) merged.hasVideo = true;
     this.collectedBookmarks.set(tweet.id, merged);
     return false;
   }
@@ -413,6 +432,67 @@ export class XBookmarksView extends ItemView {
       if (Date.now() - start > 3000 && res && res.href && !res.href.includes(`/status/${id}`)) break;
     }
     return null;
+  }
+
+  /**
+   * Backstop for video/GIF poster frames the live GraphQL interceptor missed — X served the tweet
+   * from a cached response, never via a network call, or (kevinma case) the video lives in a quoted
+   * tweet whose media the interceptor keys under a different id. Such tweets are flagged `hasVideo`
+   * during the DOM scrape but carry no `videoPosters`. For each, fetch the poster deterministically
+   * from X's public syndication endpoint by id — no webview, no race. Runs after the scroll loop.
+   */
+  private async recoverVideoPosters(): Promise<void> {
+    const candidates = Array.from(this.collectedBookmarks.values()).filter(
+      (t) => t.hasVideo && (t.videoPosters?.length ?? 0) === 0 && /^\d+$/.test(t.id)
+    );
+    if (candidates.length === 0) return;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const t = candidates[i];
+      if (this.hintSpan) this.hintSpan.setText(`Recovering video thumbnails… ${i + 1}/${candidates.length}`);
+      const posters = await this.fetchSyndicationPosters(t.id);
+      if (posters.length > 0) {
+        this.mergeBookmark({ ...t, videoPosters: posters });
+      } else {
+        console.warn(`x-bookmarks-sync: no video poster available for ${t.url} (protected, deleted, or no media).`);
+      }
+    }
+  }
+
+  /**
+   * Read a tweet's video/GIF poster frame(s) from X's public syndication endpoint by id — the same
+   * service that powers embedded tweets on the web. Covers both the focal tweet's media and a quoted
+   * tweet's (a bookmark commenting on someone else's video). Returns [] for protected/deleted tweets
+   * or any non-OK response.
+   *
+   * The `token` param must be non-empty; X currently accepts any value. The per-id derivation X's own
+   * embeds use is undocumented — if X ever enforces it, this returns {} and posters go missing (the
+   * upgrade path is react-tweet's `((id/1e15)*Math.PI).toString(36)` token formula).
+   */
+  private async fetchSyndicationPosters(id: string): Promise<string[]> {
+    const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    try {
+      const res = await requestUrl({
+        url: `https://cdn.syndication.twimg.com/tweet-result?id=${id}&token=xbs1`,
+        headers: { 'User-Agent': UA },
+      });
+      const data = res.json as SyndicationTweet | null;
+      if (!data) return [];
+      const posters: string[] = [];
+      const collect = (media?: SyndicationMedia[]) => {
+        for (const m of media || []) {
+          if ((m.type === 'video' || m.type === 'animated_gif') && m.media_url_https) {
+            const url = m.media_url_https.split('?')[0] + '?format=jpg&name=large';
+            if (!posters.includes(url)) posters.push(url);
+          }
+        }
+      };
+      collect(data.mediaDetails);
+      collect(data.quoted_tweet?.mediaDetails);
+      return posters;
+    } catch {
+      return []; // non-2xx (deleted/protected), network error, or unparseable body
+    }
   }
 
   async copyAsMarkdown() {
@@ -549,7 +629,7 @@ export class XBookmarksView extends ItemView {
                       const images = __xbsFindImages(tweet);
 
                       if (text || url || article || images.length > 0) {
-                          const result = { id: String(id), name: String(name), username: String(username), text: String(text), url: String(url), truncated: !!tweet.querySelector('[data-testid="tweet-text-show-more-link"]') };
+                          const result = { id: String(id), name: String(name), username: String(username), text: String(text), url: String(url), truncated: !!tweet.querySelector('[data-testid="tweet-text-show-more-link"]'), hasVideo: !!tweet.querySelector('[data-testid="videoPlayer"], [data-testid="videoComponent"], video') };
                           if (article) result.article = article;
                           if (images.length > 0) result.images = images;
                           results.push(result);
@@ -935,6 +1015,8 @@ export class XBookmarksView extends ItemView {
       // Recover any bookmarks whose full body the API interceptor missed (X served only the
       // truncated "Show more" preview). Detected structurally via tweet-text-show-more-link.
       await this.recoverTruncatedBookmarks();
+      // Recover video/GIF poster frames the interceptor missed (flagged hasVideo, no videoPosters).
+      await this.recoverVideoPosters();
       this.isScrolling = false;
       if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
       this.updateToolbar();

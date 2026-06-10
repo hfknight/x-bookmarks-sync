@@ -20,6 +20,9 @@ export interface Tweet {
   // DOM showed a "Show more" affordance for this tweet — its extracted text is X's
   // truncated timeline preview, not the full body. Used to drive the recovery backstop.
   truncated?: boolean;
+  // DOM showed a video/GIF player for this tweet. When set but videoPosters is empty,
+  // the API interceptor missed the poster frame — drives the poster recovery backstop.
+  hasVideo?: boolean;
 }
 
 export interface XBookmarksSyncData {
