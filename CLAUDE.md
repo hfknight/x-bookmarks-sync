@@ -18,6 +18,7 @@ This is an Obsidian plugin that syncs X (Twitter) bookmarks to an Obsidian vault
 - Always clean up in `onunload`: call `this.app.workspace.detachLeavesOfType(VIEW_TYPE)` for any registered views
 - `isDesktopOnly: true` in manifest — plugin uses Electron's `<webview>` tag
 - To read an X page in the background (article body, truncated-tweet recovery), reuse the hidden off-screen webview pattern (`x-bookmarks-hidden-webview` + `createEl('webview' …)`) — see `fetchArticleByHiddenWebview` (main.ts) and `recoverTruncatedBookmarks` (view.ts). Don't navigate the visible view and rely on redirecting back.
+- For tweet **data/media by id** (e.g. video/GIF poster frames), prefer X's public syndication endpoint (`cdn.syndication.twimg.com/tweet-result?id=…&token=<any-nonempty>`, via `requestUrl`, no auth) over the live GraphQL interceptor, which is racy (misses tweets during fast scroll) and structurally blind to quoted-tweet media. See `fetchSyndicationPosters` (view.ts). Token must be non-empty (per-id derivation is undocumented); protected/deleted tweets return `{}`.
 
 ## Build
 
