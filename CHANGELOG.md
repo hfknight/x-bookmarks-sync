@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.9
+
+- **Video thumbnails now import reliably** — bookmarks with a video or GIF (including a video inside a quoted tweet) now consistently import their thumbnail, fixing cases in 1.1.8 where some imported with no thumbnail at all.
+- **Removing a bookmark respects your deletion preference** — the remove / "Re-import on next sync" action now follows your Obsidian "Deleted files" setting (system trash, Obsidian trash, or permanent) instead of always moving the note to system trash.
+
 ## 1.1.8
 
 - **Videos now appear in imported notes** — bookmarks containing a video or GIF now import with the video's thumbnail (marked ▶ Video) that you can click to open and watch on X, instead of importing with no media at all.
