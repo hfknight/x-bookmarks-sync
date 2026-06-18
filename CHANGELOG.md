@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.10
+
+- **Quoted tweets are folded into the note** — when you bookmark a tweet that quotes another, the quoted tweet (author, text, photos, and video) now appears inline under a "Quoted tweet" heading, instead of being saved as a separate, orphaned note.
+- **"▶ Video" is now a clickable link** — it opens the tweet's video viewer on X directly, instead of sitting as plain text beside the thumbnail.
+- **Shortened links show their real destination** — `t.co` links in a tweet's body are expanded to the actual URL (for example, the author's site), and the redundant media link is removed.
+
 ## 1.1.9
 
 - **Video thumbnails now import reliably** — bookmarks with a video or GIF (including a video inside a quoted tweet) now consistently import their thumbnail, fixing cases in 1.1.8 where some imported with no thumbnail at all.
