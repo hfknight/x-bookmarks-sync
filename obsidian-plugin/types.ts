@@ -6,6 +6,15 @@ export interface ArticleCard {
   excerpt: string;
 }
 
+export interface QuotedTweet {
+  name: string;
+  username: string;
+  text: string;
+  url: string;
+  images?: string[];
+  videoPosters?: string[];
+}
+
 export interface Tweet {
   id: string;
   name: string;
@@ -23,6 +32,13 @@ export interface Tweet {
   // DOM showed a video/GIF player for this tweet. When set but videoPosters is empty,
   // the API interceptor missed the poster frame — drives the poster recovery backstop.
   hasVideo?: boolean;
+  // An embedded quoted tweet, folded into the parent note. Populated by the syndication
+  // recovery pass; the quote is never imported as its own bookmark.
+  quoted?: QuotedTweet;
+  // DOM/interceptor saw an embedded quoted tweet — drives the quote recovery pass
+  // (parallel to hasVideo). High-recall flag; syndication is the authority on whether
+  // a quote actually exists.
+  hasQuote?: boolean;
 }
 
 export interface XBookmarksSyncData {

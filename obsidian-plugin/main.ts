@@ -2,6 +2,7 @@ import { Plugin, addIcon, Notice, TFile, TFolder, MarkdownView } from 'obsidian'
 import Defuddle from 'defuddle/full';
 import changelogText from '../CHANGELOG.md';
 import { VIEW_TYPE, XBookmarksSyncData, Tweet } from './types';
+import { renderQuotedSection } from './quoted';
 import { XBookmarksView } from './view';
 import { XBookmarksSyncSettingTab } from './settings-tab';
 import { WhatsNewModal, parseChangelog, notesSince } from './whats-new-modal';
@@ -441,6 +442,8 @@ export default class XBookmarksSync extends Plugin {
       ? `\narticle_url: "${tweet.article.url.replace(/"/g, '\\"')}"`
       : '';
 
+    const quotedSection = tweet.quoted ? renderQuotedSection(tweet.quoted) : '';
+
     let articleSection = '';
     if (tweet.article) {
       const parts: string[] = ['\n\n## Linked article\n'];
@@ -454,12 +457,15 @@ export default class XBookmarksSync extends Plugin {
       ? '\n\n' + tweet.images.map(u => `![](${u})`).join('\n')
       : '';
 
-    // Videos/GIFs: clickable poster thumbnail opens the tweet (X media URLs aren't
-    // reliably embeddable, so we link out rather than hotlink the stream). The ▶ marks
-    // it as a video so it isn't mistaken for a photo; the footer "View on X" covers navigation.
+    // Videos/GIFs: the "▶ Video" label and the poster thumbnail both link to X's video viewer for
+    // the tweet (…/status/<id>/video/N — N is 1-based per video). X media URLs aren't reliably
+    // embeddable, so we link out rather than hotlink the stream. The ▶ marks it as a video.
     const videosSection = tweet.videoPosters && tweet.videoPosters.length > 0
       ? '\n\n' + tweet.videoPosters
-        .map(u => `▶ Video\n\n[![](${u})](${tweet.url})`)
+        .map((u, i) => {
+          const videoUrl = `${tweet.url}/video/${i + 1}`;
+          return `[▶ Video](${videoUrl})\n\n[![](${u})](${videoUrl})`;
+        })
         .join('\n\n')
       : '';
 
@@ -474,7 +480,7 @@ tags: [${this.settings.defaultTags.join(', ')}]
 
 # Tweet by ${tweet.name} (${tweet.username})
 
-${tweet.text}${imagesSection}${videosSection}${articleSection}
+${tweet.text}${imagesSection}${videosSection}${quotedSection}${articleSection}
 
 [View on X](${tweet.url}) | [Open in Obsidian Webview](obsidian://x-bookmarks?url=${encodeURIComponent(tweet.url)})
 `;

@@ -6,16 +6,6 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 
 ---
 
-## What's new
-
-- **Import X article body** — pull the full body of a bookmarked X long-form article into its note and rename the file to the article title. Right-click in the note, command palette, or toolbar button while viewing the article.
-- **Long tweets imported in full** — premium long-form posts (`note_tweet`) are no longer truncated at the visible "Show more" cutoff.
-- **Images embedded** — photo attachments on bookmarked tweets now appear in the note as Markdown image links to the X CDN.
-- **Re-import a single bookmark** — refresh one note's content on the next sync without clearing your entire import history.
-- **Toolbar restructured** — new **Import article** button on `/status/` and `/article/` pages; **Copy main content** (replaces "Copy as Markdown") now strips replies and thread context.
-
----
-
 ## Features
 
 - **No API key required** — works by scraping the loaded page via an embedded webview; piggybacks on your existing X session
@@ -24,6 +14,8 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 - **Duplicate detection** — already-imported bookmarks are grayed out and skipped automatically
 - **Long tweets supported** — premium long-form posts are imported in full, not truncated at the visible "Show more" cutoff
 - **Images embedded** — photo attachments on bookmarked tweets are saved as Markdown image links to the X CDN
+- **Videos & GIFs** — the poster thumbnail is embedded with a **▶ Video** link to X's video viewer (the stream itself isn't downloaded)
+- **Quoted tweets folded in** — a bookmark that quotes another tweet shows the quoted author, text, and media inline under a **Quoted tweet** heading, instead of importing the quote as a separate note
 - **Import X article body** — for tweets that are native X long-form articles, fetch the full article body into the note and rename the file to the article title (right-click in note, command palette, or toolbar button while viewing the article)
 - **Re-import on next sync** — delete a single bookmark from history with one click and have it re-imported on the next sync
 - **Copy main content** — clipboard-copy the focal tweet/article from the webview, replies stripped, powered by [Defuddle](https://github.com/kepano/defuddle)
@@ -151,7 +143,7 @@ Copy `obsidian-plugin/main.js` and `obsidian-plugin/manifest.json` into `.obsidi
 
 ## Note Format
 
-Each saved bookmark becomes a Markdown file. Optional sections are added when the bookmark contains an article card, photos, or has had its article body imported.
+Each saved bookmark becomes a Markdown file. Optional sections are added when the bookmark contains photos, a video/GIF, a quoted tweet, an article card, or has had its article body imported.
 
 ```markdown
 ---
@@ -169,6 +161,18 @@ tags: [twitter, bookmark]
 The full text of the tweet goes here...
 
 ![](https://pbs.twimg.com/media/EXAMPLE.jpg?format=jpg&name=large)
+
+[▶ Video](https://x.com/handle/status/1234567890/video/1)        # only if the tweet has a video/GIF
+
+[![](https://pbs.twimg.com/amplify_video_thumb/…/poster.jpg)](https://x.com/handle/status/1234567890/video/1)
+
+## Quoted tweet              # only if the tweet quotes another tweet
+
+> **Quoted Author** (@quoted_handle)
+>
+> The quoted tweet's text…
+>
+> [View on X](https://x.com/quoted_handle/status/...)
 
 ## Linked article            # only if the tweet contains an X article card
 
@@ -192,7 +196,7 @@ Short excerpt rendered in the card…
 
 - **Desktop only** — requires Electron's `<webview>` tag, not available in Obsidian mobile.
 - **Subject to X.com DOM changes** — if X changes their markup, the scraper selectors may need updating.
-- **Videos & GIFs not imported** — only photos are embedded; for videos/GIFs the note links back to X. Future work.
+- **Video/GIF streams not downloaded** — the poster thumbnail is embedded with a **▶ Video** link to the tweet's video viewer on X, but the video file itself isn't saved locally.
 - **CDN-hosted images** — embedded images reference X's CDN (`pbs.twimg.com`). If X removes the image, the link in your note breaks. Local-download support is planned.
 - **Existing notes don't backfill new fields** — when you upgrade and gain new features (like long-tweet text or image embedding), already-imported notes stay as they were. Use **Re-import this bookmark on next sync** to refresh individual notes, or **Clear import history** to wipe everything and re-sync.
 

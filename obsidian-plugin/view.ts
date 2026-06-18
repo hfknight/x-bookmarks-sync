@@ -2,17 +2,10 @@ import { ItemView, WorkspaceLeaf, Notice, setIcon, requestUrl } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import type XBookmarksSync from './main';
 import { BookmarkSelectionModal } from './modal';
-import { VIEW_TYPE, Tweet } from './types';
+import { VIEW_TYPE, Tweet, QuotedTweet } from './types';
+import { SyndicationTweet, SyndicationMedia, parseQuotedTweet } from './quoted';
 
 const TWEET_OR_ARTICLE_URL = /\/(?:status|article)\/\d+/;
-
-// Minimal shape of X's public syndication response (cdn.syndication.twimg.com) — only the
-// media fields we read for poster recovery.
-interface SyndicationMedia { type?: string; media_url_https?: string; }
-interface SyndicationTweet {
-  mediaDetails?: SyndicationMedia[];
-  quoted_tweet?: { mediaDetails?: SyndicationMedia[] };
-}
 
 interface ElectronWebview extends HTMLElement {
   executeJavaScript(code: string): Promise<unknown>;
@@ -173,8 +166,24 @@ export class XBookmarksView extends ItemView {
                   if (screenName) {
                     var id = String((obj.legacy && obj.legacy.id_str) || obj.rest_id);
                     // For long tweets (X Premium), full body is in note_tweet, not legacy.full_text
-                    var noteText = obj.note_tweet && obj.note_tweet.note_tweet_results && obj.note_tweet.note_tweet_results.result && obj.note_tweet.note_tweet_results.result.text;
+                    var noteResult = obj.note_tweet && obj.note_tweet.note_tweet_results && obj.note_tweet.note_tweet_results.result;
+                    var noteText = noteResult && noteResult.text;
                     var text = String(noteText || (obj.legacy && (obj.legacy.full_text || obj.legacy.text)) || '');
+                    // Expand t.co -> real url and strip media links (mirrors expandLinks() in quoted.ts).
+                    // note_tweet carries its own entity_set; legacy text uses legacy.entities.
+                    var urlEnts = (noteText && noteResult.entity_set && noteResult.entity_set.urls)
+                      || (obj.legacy && obj.legacy.entities && obj.legacy.entities.urls) || [];
+                    var mediaEnts = (obj.legacy && obj.legacy.extended_entities && obj.legacy.extended_entities.media)
+                      || (obj.legacy && obj.legacy.entities && obj.legacy.entities.media) || [];
+                    for (var ui = 0; ui < urlEnts.length; ui++) {
+                      var ue = urlEnts[ui];
+                      if (ue && ue.url && ue.expanded_url) text = text.split(ue.url).join(ue.expanded_url);
+                    }
+                    for (var mxi = 0; mxi < mediaEnts.length; mxi++) {
+                      var mx = mediaEnts[mxi];
+                      if (mx && mx.url) text = text.split(mx.url).join('');
+                    }
+                    text = text.replace(/\\s*https?:\\/\\/t\\.co\\/\\w+\\s*$/, '').trim();
                     var url = 'https://x.com/' + screenName + '/status/' + id;
                     // Photo URLs + video/gif poster frames from extended_entities (preferred) or entities.media
                     var images = [];
@@ -210,13 +219,23 @@ export class XBookmarksView extends ItemView {
                       if (images.length > (prev.images ? prev.images.length : 0)) prev.images = images;
                       if (videoPosters.length > (prev.videoPosters ? prev.videoPosters.length : 0)) prev.videoPosters = videoPosters;
                     }
+                    // Flag bookmarks that embed a quoted tweet so the recovery pass folds it in.
+                    if (obj.quoted_status_result && window.__xbsApiCollected[id]) window.__xbsApiCollected[id].hasQuote = true;
                   }
                 }
               } catch(e) {}
             }
-            var items = Array.isArray(obj) ? obj : Object.values(obj);
-            for (var i = 0; i < items.length; i++) {
-              if (items[i] && typeof items[i] === 'object') __xbsFindTweets(items[i], depth + 1);
+            if (Array.isArray(obj)) {
+              for (var i = 0; i < obj.length; i++) {
+                if (obj[i] && typeof obj[i] === 'object') __xbsFindTweets(obj[i], depth + 1);
+              }
+            } else {
+              // Skip quoted_status_result: the embedded quoted tweet is folded into the parent's
+              // note (via syndication), never collected as a standalone bookmark.
+              for (var k in obj) {
+                if (k === 'quoted_status_result') continue;
+                if (obj[k] && typeof obj[k] === 'object') __xbsFindTweets(obj[k], depth + 1);
+              }
             }
           }
 
@@ -317,6 +336,8 @@ export class XBookmarksView extends ItemView {
     if ((tweet.videoPosters?.length ?? 0) > (existing.videoPosters?.length ?? 0)) merged.videoPosters = tweet.videoPosters;
     if (tweet.truncated) merged.truncated = true;
     if (tweet.hasVideo) merged.hasVideo = true;
+    if (!existing.quoted && tweet.quoted) merged.quoted = tweet.quoted;
+    if (tweet.hasQuote) merged.hasQuote = true;
     this.collectedBookmarks.set(tweet.id, merged);
     return false;
   }
@@ -436,10 +457,10 @@ export class XBookmarksView extends ItemView {
 
   /**
    * Backstop for video/GIF poster frames the live GraphQL interceptor missed — X served the tweet
-   * from a cached response, never via a network call, or (kevinma case) the video lives in a quoted
-   * tweet whose media the interceptor keys under a different id. Such tweets are flagged `hasVideo`
-   * during the DOM scrape but carry no `videoPosters`. For each, fetch the poster deterministically
-   * from X's public syndication endpoint by id — no webview, no race. Runs after the scroll loop.
+   * from a cached response, never via a network call. Such tweets are flagged `hasVideo` during the
+   * DOM scrape but carry no `videoPosters`. For each, fetch the poster deterministically from X's
+   * public syndication endpoint by id — no webview, no race. Runs after the scroll loop. (A video
+   * that lives in a quoted tweet is handled by recoverQuotedTweets, which folds it into the quote.)
    */
   private async recoverVideoPosters(): Promise<void> {
     const candidates = Array.from(this.collectedBookmarks.values()).filter(
@@ -460,10 +481,9 @@ export class XBookmarksView extends ItemView {
   }
 
   /**
-   * Read a tweet's video/GIF poster frame(s) from X's public syndication endpoint by id — the same
-   * service that powers embedded tweets on the web. Covers both the focal tweet's media and a quoted
-   * tweet's (a bookmark commenting on someone else's video). Returns [] for protected/deleted tweets
-   * or any non-OK response.
+   * Read a tweet's own video/GIF poster frame(s) from X's public syndication endpoint by id — the
+   * same service that powers embedded tweets on the web. Returns [] for protected/deleted tweets or
+   * any non-OK response. (Quoted-tweet media is handled separately by fetchSyndicationQuote.)
    *
    * The `token` param must be non-empty; X currently accepts any value. The per-id derivation X's own
    * embeds use is undocumented — if X ever enforces it, this returns {} and posters go missing (the
@@ -488,10 +508,44 @@ export class XBookmarksView extends ItemView {
         }
       };
       collect(data.mediaDetails);
-      collect(data.quoted_tweet?.mediaDetails);
       return posters;
     } catch {
       return []; // non-2xx (deleted/protected), network error, or unparseable body
+    }
+  }
+
+  /**
+   * Fold embedded quoted tweets into their parent notes. Bookmarks flagged `hasQuote` (DOM saw a
+   * second author block, or the interceptor saw quoted_status_result) but without `quoted` yet are
+   * resolved deterministically: fetch the parent from X's syndication endpoint and read its
+   * `quoted_tweet`. Runs after the scroll loop, alongside the other syndication backstops.
+   */
+  private async recoverQuotedTweets(): Promise<void> {
+    const candidates = Array.from(this.collectedBookmarks.values()).filter(
+      (t) => t.hasQuote && !t.quoted && /^\d+$/.test(t.id)
+    );
+    if (candidates.length === 0) return;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const t = candidates[i];
+      if (this.hintSpan) this.hintSpan.setText(`Recovering quoted tweets… ${i + 1}/${candidates.length}`);
+      const quoted = await this.fetchSyndicationQuote(t.id);
+      if (quoted) this.mergeBookmark({ ...t, quoted });
+    }
+  }
+
+  // Read a bookmark's embedded quoted tweet from X's syndication endpoint by parent id. Returns
+  // undefined when there is no quote, or it's protected/deleted, or any non-OK response.
+  private async fetchSyndicationQuote(id: string): Promise<QuotedTweet | undefined> {
+    const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    try {
+      const res = await requestUrl({
+        url: `https://cdn.syndication.twimg.com/tweet-result?id=${id}&token=xbs1`,
+        headers: { 'User-Agent': UA },
+      });
+      return parseQuotedTweet(res.json as SyndicationTweet | null);
+    } catch {
+      return undefined; // non-2xx (deleted/protected), network error, or unparseable body
     }
   }
 
@@ -602,6 +656,20 @@ export class XBookmarksView extends ItemView {
             return text;
           }
 
+          // True when the tweet embeds a quoted tweet. Two independent signals OR'd for recall:
+          // a second author block, or a link to a different tweet's permalink (its own).
+          function __xbsHasQuote(tweetEl, ownId) {
+            try {
+              if (tweetEl.querySelectorAll('[data-testid="User-Name"]').length > 1) return true;
+              for (const a of tweetEl.querySelectorAll('a[href*="/status/"]')) {
+                const h = typeof a.href === 'string' ? a.href : (a.getAttribute ? a.getAttribute('href') || '' : '');
+                const m = h.match(/\\/status\\/(\\d+)/);
+                if (m && m[1] !== ownId) return true;
+              }
+              return false;
+            } catch (e) { return false; }
+          }
+
           try {
               const tweets = document.querySelectorAll('article[data-testid="tweet"]');
               const results = [];
@@ -629,7 +697,7 @@ export class XBookmarksView extends ItemView {
                       const images = __xbsFindImages(tweet);
 
                       if (text || url || article || images.length > 0) {
-                          const result = { id: String(id), name: String(name), username: String(username), text: String(text), url: String(url), truncated: !!tweet.querySelector('[data-testid="tweet-text-show-more-link"]'), hasVideo: !!tweet.querySelector('[data-testid="videoPlayer"], [data-testid="videoComponent"], video') };
+                          const result = { id: String(id), name: String(name), username: String(username), text: String(text), url: String(url), truncated: !!tweet.querySelector('[data-testid="tweet-text-show-more-link"]'), hasVideo: !!tweet.querySelector('[data-testid="videoPlayer"], [data-testid="videoComponent"], video'), hasQuote: __xbsHasQuote(tweet, String(id)) };
                           if (article) result.article = article;
                           if (images.length > 0) result.images = images;
                           results.push(result);
@@ -775,6 +843,20 @@ export class XBookmarksView extends ItemView {
             return text;
           }
 
+          // True when the tweet embeds a quoted tweet. Two independent signals OR'd for recall:
+          // a second author block, or a link to a different tweet's permalink (its own).
+          function __xbsHasQuote(tweetEl, ownId) {
+            try {
+              if (tweetEl.querySelectorAll('[data-testid="User-Name"]').length > 1) return true;
+              for (const a of tweetEl.querySelectorAll('a[href*="/status/"]')) {
+                const h = typeof a.href === 'string' ? a.href : (a.getAttribute ? a.getAttribute('href') || '' : '');
+                const m = h.match(/\\/status\\/(\\d+)/);
+                if (m && m[1] !== ownId) return true;
+              }
+              return false;
+            } catch (e) { return false; }
+          }
+
           function __xbsExtractTweet(tweetEl) {
             try {
               const textEl = tweetEl.querySelector('[data-testid="tweetText"]');
@@ -801,7 +883,11 @@ export class XBookmarksView extends ItemView {
                 const entry = {
                   id: String(id), name: String(name),
                   username: String(username), text: String(text), url: String(url),
-                  truncated: !!tweetEl.querySelector('[data-testid="tweet-text-show-more-link"]')
+                  truncated: !!tweetEl.querySelector('[data-testid="tweet-text-show-more-link"]'),
+                  // High-recall flag for the quote-fold recovery pass: a quote shows a second author
+                  // block AND links to its own (different) permalink. Either signal suffices; false
+                  // positives are harmless (syndication is the authority on whether a quote exists).
+                  hasQuote: __xbsHasQuote(tweetEl, String(id))
                 };
                 if (article) entry.article = article;
                 if (images.length > 0) entry.images = images;
@@ -1017,6 +1103,8 @@ export class XBookmarksView extends ItemView {
       await this.recoverTruncatedBookmarks();
       // Recover video/GIF poster frames the interceptor missed (flagged hasVideo, no videoPosters).
       await this.recoverVideoPosters();
+      // Fold embedded quoted tweets into their parent notes (flagged hasQuote, no quoted yet).
+      await this.recoverQuotedTweets();
       this.isScrolling = false;
       if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
       this.updateToolbar();

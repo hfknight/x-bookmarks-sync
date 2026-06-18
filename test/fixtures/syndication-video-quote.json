@@ -1,0 +1,25 @@
+{
+  "mediaDetails": [],
+  "quoted_tweet": {
+    "id_str": "1234567890000000001",
+    "text": "Watch this demo of the new feature in action https://t.co/ABC123vid",
+    "user": {
+      "name": "Demo Account",
+      "screen_name": "demoacct"
+    },
+    "mediaDetails": [
+      {
+        "type": "video",
+        "media_url_https": "https://pbs.twimg.com/amplify_video_thumb/1234567890000000001/img/POSTERxyz.jpg"
+      }
+    ],
+    "entities": {
+      "urls": [],
+      "media": [
+        {
+          "url": "https://t.co/ABC123vid"
+        }
+      ]
+    }
+  }
+}
