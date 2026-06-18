@@ -179,7 +179,7 @@ export default class XBookmarksSync extends Plugin {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     const id = fm && fm.id != null ? String(fm.id) : '';
     if (!id) {
-      new Notice('No bookmark id found in this note.');
+      new Notice('No bookmark ID found in this note.');
       return;
     }
 
@@ -193,7 +193,7 @@ export default class XBookmarksSync extends Plugin {
   async fetchArticleFromWebview(currentUrl: string) {
     const idMatch = currentUrl.match(/(?:status|article)\/(\d+)/);
     if (!idMatch) {
-      new Notice('No tweet id in current URL.');
+      new Notice('No tweet ID in current URL.');
       return;
     }
     const file = this.findBookmarkNoteById(idMatch[1]);
