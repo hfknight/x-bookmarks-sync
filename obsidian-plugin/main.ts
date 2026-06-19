@@ -253,17 +253,22 @@ export default class XBookmarksSync extends Plugin {
       return;
     }
 
-    const titleLine = result.title.trim() ? `### ${result.title.trim()}\n\n` : '';
-    await this.app.vault.modify(file, `${existing}\n\n## Full article\n\n${titleLine}${result.markdown}\n`);
+    const title = result.title.trim();
+    // Promote the article title to the note's H1 — the note is effectively the article now and is
+    // renamed to the title below, so "# Tweet by …" undersells it. Author stays in frontmatter. Leaves
+    // a user-customized H1 (anything other than the generated "# Tweet by …") untouched. With the title
+    // in the H1, the old "### {title}" line under "## Full article" would just duplicate it, so it's gone.
+    const body = title ? existing.replace(/^# Tweet by .*$/m, () => `# ${title}`) : existing;
+    await this.app.vault.modify(file, `${body}\n\n## Full article\n\n${result.markdown}\n`);
 
     let renamedTo: string | null = null;
-    if (result.title.trim()) {
+    if (title) {
       try {
         const dir = file.parent?.path ?? '';
         const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
         const idStr = String(fm?.id ?? '');
         const authorStr = String(fm?.author ?? '');
-        const desired = this.buildFileNameInDir(dir, idStr, authorStr, result.title);
+        const desired = this.buildFileNameInDir(dir, idStr, authorStr, title);
         if (desired !== file.path) {
           let target = desired;
           let counter = 1;
