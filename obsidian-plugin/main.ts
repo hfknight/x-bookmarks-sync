@@ -28,6 +28,17 @@ function yamlQuote(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+// A tweet's snowflake ID encodes its creation time. Derive the post's date as YYYY-MM-DD (local),
+// the same value used for the note's filename prefix. Non-numeric/empty ids fall back to now.
+function tweetDateString(id: string): string {
+  const d = /^\d+$/.test(id)
+    ? new Date(Number((BigInt(id) >> BigInt(22)) + BigInt(1288834974657)))
+    : new Date();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
 export default class XBookmarksSync extends Plugin {
   importedIds: Set<string> = new Set();
   settings: XBookmarksSyncData = {
@@ -399,13 +410,7 @@ export default class XBookmarksSync extends Plugin {
   }
 
   private buildFileNameInDir(dir: string, id: string, author: string, titleRaw: string): string {
-    const tweetDate = id && /^\d+$/.test(id)
-      ? new Date(Number((BigInt(id) >> BigInt(22)) + BigInt(1288834974657)))
-      : new Date();
-    const month = String(tweetDate.getMonth() + 1).padStart(2, '0');
-    const day = String(tweetDate.getDate()).padStart(2, '0');
-    const year = tweetDate.getFullYear();
-    const date = `${year}-${month}-${day}`;
+    const date = tweetDateString(id);
 
     const sanitizedAuthor = (author || 'Unknown').replace(/[\\/:"*?<>|]/g, '').trim();
     let title = (titleRaw || 'Bookmark').split('\n')[0].substring(0, 40);
@@ -492,6 +497,7 @@ export default class XBookmarksSync extends Plugin {
 id: ${safeId}
 author: ${safeAuthor}
 username: ${safeUsername}
+published: ${tweetDateString(tweet.id || '')}
 scraped_date: ${date}
 url: ${safeUrl}${articleUrlLine}
 tags: [${this.settings.defaultTags.join(', ')}]
