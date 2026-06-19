@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.11
+
+- **Bookmarked X articles get a readable note title** — a native X article shared as a post is now named after the article's title, instead of a filename built from the raw article URL.
+- **"Import X article body" titles the note** — the note's heading becomes the article title (matching the renamed file), instead of "Tweet by …".
+- **No duplicate cover image** — importing an article's body no longer shows the article's cover image twice (once in the tweet section and again inside the imported article).
+- **Sturdier note frontmatter** — tweet metadata containing a backslash or quote no longer risks producing a malformed note header.
+
 ## 1.1.10
 
 - **Quoted tweets are folded into the note** — when you bookmark a tweet that quotes another, the quoted tweet (author, text, photos, and video) now appears inline under a "Quoted tweet" heading, instead of being saved as a separate, orphaned note.
