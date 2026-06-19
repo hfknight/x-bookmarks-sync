@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.12
+
+- **Choose your note filename format** — a new "Note name format" setting lets you pick how imported notes are named: Date – author – title (default), Author – title, Date – title, or Title – author. Long or non-Latin titles now stay within filesystem limits, and same-named imports no longer collide.
+- **Publish date in frontmatter** — each note records the tweet's original post date as a `published` date property (sortable, and usable in Dataview).
+- **Fresh reload on re-sync** — re-running a sync now reloads the bookmarks page instead of reusing the already-open one.
+
 ## 1.1.11
 
 - **Bookmarked X articles get a readable note title** — a native X article shared as a post is now named after the article's title, instead of a filename built from the raw article URL.
