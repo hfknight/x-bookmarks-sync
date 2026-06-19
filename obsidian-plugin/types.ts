@@ -39,6 +39,9 @@ export interface Tweet {
   // (parallel to hasVideo). High-recall flag; syndication is the authority on whether
   // a quote actually exists.
   hasQuote?: boolean;
+  // Real title of a native X article shared as a post (its tweet text is just the article link).
+  // Resolved from syndication so the note filename is meaningful instead of the raw article URL.
+  articleTitle?: string;
 }
 
 export interface XBookmarksSyncData {

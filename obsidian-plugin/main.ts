@@ -376,7 +376,7 @@ export default class XBookmarksSync extends Plugin {
   }
 
   getFileName(tweet: Tweet): string {
-    return this.buildFileNameInDir(this.settings.defaultFolder, tweet.id, tweet.name, tweet.text);
+    return this.buildFileNameInDir(this.settings.defaultFolder, tweet.id, tweet.name, tweet.articleTitle || tweet.text);
   }
 
   private buildFileNameInDir(dir: string, id: string, author: string, titleRaw: string): string {

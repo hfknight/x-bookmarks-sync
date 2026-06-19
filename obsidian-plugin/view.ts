@@ -338,6 +338,7 @@ export class XBookmarksView extends ItemView {
     if (tweet.hasVideo) merged.hasVideo = true;
     if (!existing.quoted && tweet.quoted) merged.quoted = tweet.quoted;
     if (tweet.hasQuote) merged.hasQuote = true;
+    if (!existing.articleTitle && tweet.articleTitle) merged.articleTitle = tweet.articleTitle;
     this.collectedBookmarks.set(tweet.id, merged);
     return false;
   }
@@ -546,6 +547,45 @@ export class XBookmarksView extends ItemView {
       return parseQuotedTweet(res.json as SyndicationTweet | null);
     } catch {
       return undefined; // non-2xx (deleted/protected), network error, or unparseable body
+    }
+  }
+
+  /**
+   * Native X articles shared as a post have no tweet text — their text is just the article link
+   * (e.g. https://x.com/i/article/<id>) — so getFileName would name the note after that URL. Resolve
+   * the real article title from syndication (keyed by tweet id; the reliable part of X's tweet-result)
+   * so such bookmarks get a meaningful note filename. Article *body* import is intentionally not done
+   * (see the project memory on why that was rejected) — this only fixes the filename.
+   */
+  private async recoverArticleTitles(): Promise<void> {
+    const candidates = Array.from(this.collectedBookmarks.values()).filter(
+      (t) => !t.articleTitle && /^\d+$/.test(t.id) && !this.plugin.isTweetImported(t)
+        && /^https?:\/\/x\.com\/i\/article\/\d+/.test((t.text || '').trim())
+    );
+    if (candidates.length === 0) return;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const t = candidates[i];
+      if (this.hintSpan) this.hintSpan.setText(`Resolving article titles… ${i + 1}/${candidates.length}`);
+      const title = await this.fetchSyndicationArticleTitle(t.id);
+      if (title) this.mergeBookmark({ ...t, articleTitle: title });
+    }
+  }
+
+  // Read a bookmarked article's title from X's syndication endpoint by tweet id. Returns null when the
+  // tweet is not an article, or it's protected/deleted, or any non-OK response.
+  private async fetchSyndicationArticleTitle(id: string): Promise<string | null> {
+    const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    try {
+      const res = await requestUrl({
+        url: `https://cdn.syndication.twimg.com/tweet-result?id=${id}&token=xbs1`,
+        headers: { 'User-Agent': UA },
+      });
+      const data = res.json as SyndicationTweet | null;
+      const title = data?.article?.title;
+      return title && title.trim() ? title.trim() : null;
+    } catch {
+      return null; // non-2xx (deleted/protected), network error, or unparseable body
     }
   }
 
@@ -1105,6 +1145,8 @@ export class XBookmarksView extends ItemView {
       await this.recoverVideoPosters();
       // Fold embedded quoted tweets into their parent notes (flagged hasQuote, no quoted yet).
       await this.recoverQuotedTweets();
+      // Resolve real article titles so article-link bookmarks get meaningful note filenames.
+      await this.recoverArticleTitles();
       this.isScrolling = false;
       if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
       this.updateToolbar();

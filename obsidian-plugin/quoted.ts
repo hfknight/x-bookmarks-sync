@@ -18,6 +18,7 @@ export interface SyndicationQuotedTweet {
 export interface SyndicationTweet {
   mediaDetails?: SyndicationMedia[];
   quoted_tweet?: SyndicationQuotedTweet;
+  article?: { title?: string };
 }
 
 // pbs.twimg.com media URL → normalized large JPG, matching the interceptor's parent-photo and
