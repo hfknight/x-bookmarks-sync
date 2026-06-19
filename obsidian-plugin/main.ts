@@ -265,7 +265,7 @@ export default class XBookmarksSync extends Plugin {
     // image is left intact.)
     body = body.replace(
       /\n*!\[\]\(https?:\/\/pbs\.twimg\.com\/media\/([A-Za-z0-9_-]+)[^)]*\)/g,
-      (match, mediaId) => (result.markdown.includes(mediaId) ? '' : match),
+      (match: string, mediaId: string) => (result.markdown.includes(mediaId) ? '' : match),
     );
     await this.app.vault.modify(file, `${body}\n\n## Full article\n\n${result.markdown}\n`);
 
