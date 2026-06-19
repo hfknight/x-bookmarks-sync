@@ -44,10 +44,13 @@ export interface Tweet {
   articleTitle?: string;
 }
 
+export type FileNameFormat = 'date-author-title' | 'author-title' | 'date-title' | 'title-author';
+
 export interface XBookmarksSyncData {
   importedIds: string[];
   defaultFolder: string;
   defaultTags: string[];
+  fileNameFormat: FileNameFormat;
   lastSyncAt: string | null;
   lastShownVersion: string | null;
   forceFullScanOnNextSync: boolean;

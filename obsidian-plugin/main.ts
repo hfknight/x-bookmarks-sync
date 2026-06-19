@@ -1,7 +1,7 @@
 import { Plugin, addIcon, Notice, TFile, TFolder, MarkdownView } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import changelogText from '../CHANGELOG.md';
-import { VIEW_TYPE, XBookmarksSyncData, Tweet } from './types';
+import { VIEW_TYPE, XBookmarksSyncData, FileNameFormat, Tweet } from './types';
 import { renderQuotedSection } from './quoted';
 import { XBookmarksView } from './view';
 import { XBookmarksSyncSettingTab } from './settings-tab';
@@ -28,6 +28,28 @@ function yamlQuote(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+// UTF-8 byte length of a single Unicode code point.
+function codepointBytes(cp: number): number {
+  if (cp <= 0x7f) return 1;
+  if (cp <= 0x7ff) return 2;
+  if (cp <= 0xffff) return 3;
+  return 4;
+}
+
+// Trim a string so its UTF-8 byte length is ≤ maxBytes, never splitting a code point. Filenames are
+// capped at 255 bytes on common filesystems (Dropbox dislikes long names too), and CJK chars are
+// 3 bytes each — so the limit that matters is bytes, not characters.
+function truncateBytes(value: string, maxBytes: number): string {
+  let bytes = 0;
+  let out = '';
+  for (const ch of value) {
+    bytes += codepointBytes(ch.codePointAt(0) ?? 0);
+    if (bytes > maxBytes) break;
+    out += ch;
+  }
+  return out;
+}
+
 // A tweet's snowflake ID encodes its creation time. Derive the post's date as YYYY-MM-DD (local),
 // the same value used for the note's filename prefix. Non-numeric/empty ids fall back to now.
 function tweetDateString(id: string): string {
@@ -45,6 +67,7 @@ export default class XBookmarksSync extends Plugin {
     importedIds: [],
     defaultFolder: 'x-bookmarks',
     defaultTags: ['twitter', 'bookmark'],
+    fileNameFormat: 'date-author-title',
     lastSyncAt: null,
     lastShownVersion: null,
     forceFullScanOnNextSync: false,
@@ -57,6 +80,7 @@ export default class XBookmarksSync extends Plugin {
       importedIds: data?.importedIds ?? [],
       defaultFolder: data?.defaultFolder ?? 'x-bookmarks',
       defaultTags: data?.defaultTags ?? ['twitter', 'bookmark'],
+      fileNameFormat: data?.fileNameFormat ?? 'date-author-title',
       lastSyncAt: data?.lastSyncAt ?? null,
       lastShownVersion: data?.lastShownVersion ?? null,
       forceFullScanOnNextSync: data?.forceFullScanOnNextSync ?? false,
@@ -409,27 +433,31 @@ export default class XBookmarksSync extends Plugin {
     return this.buildFileNameInDir(this.settings.defaultFolder, tweet.id, tweet.name, tweet.articleTitle || tweet.text);
   }
 
-  private buildFileNameInDir(dir: string, id: string, author: string, titleRaw: string): string {
+  private buildFileNameInDir(dir: string, id: string, authorRaw: string, titleRaw: string): string {
+    // Sanitize: first line only, strip filename-illegal chars, trim.
+    const clean = (s: string) => s.split('\n')[0].replace(/[\\/:"*?<>|]/g, '').trim();
     const date = tweetDateString(id);
+    // Byte-budget each variable part so the whole filename stays well under the 255-byte limit
+    // (author ~60 + title ~110 + date 10 + separators/.md ≈ 185, leaving room for a -N suffix).
+    const author = truncateBytes(clean(authorRaw) || 'Unknown', 60).trimEnd() || 'Unknown';
+    const title = truncateBytes(clean(titleRaw) || 'Bookmark', 110).trimEnd() || 'Bookmark';
 
-    const sanitizedAuthor = (author || 'Unknown').replace(/[\\/:"*?<>|]/g, '').trim();
-    let title = (titleRaw || 'Bookmark').split('\n')[0].substring(0, 40);
-    title = title.replace(/[\\/:"*?<>|]/g, '').trim();
-    if (!title) title = 'Bookmark';
-
-    const base = `${date}-${sanitizedAuthor}-${title}.md`;
+    const parts: Record<FileNameFormat, string[]> = {
+      'date-author-title': [date, author, title],
+      'author-title': [author, title],
+      'date-title': [date, title],
+      'title-author': [title, author],
+    };
+    const base = `${(parts[this.settings.fileNameFormat] ?? parts['date-author-title']).join('-')}.md`;
     return dir ? `${dir}/${base}` : base;
   }
 
   isTweetImported(tweet: Tweet): boolean {
     if (this.importedIds.has(tweet.id)) return true;
-    // Fallback: check file paths for bookmarks imported before the ID set existed
-    const oldFileName = `x-bookmarks/Tweet-${tweet.id}.md`;
-    const newFileName = this.getFileName(tweet);
-    return (
-      !!this.app.vault.getAbstractFileByPath(oldFileName) ||
-      !!this.app.vault.getAbstractFileByPath(newFileName)
-    );
+    // Legacy fallback for bookmarks imported before the ID set existed (original id-based filename).
+    // The format-based name is intentionally not checked: with configurable formats it can both miss
+    // (the format changed) and false-positive (a different tweet's note shares the name).
+    return !!this.app.vault.getAbstractFileByPath(`x-bookmarks/Tweet-${tweet.id}.md`);
   }
 
   async saveBookmarksToVault(bookmarks: Tweet[]) {
@@ -441,14 +469,23 @@ export default class XBookmarksSync extends Plugin {
 
     let count = 0;
     for (const tweet of bookmarks) {
-      const fileName = this.getFileName(tweet);
-      const fileExists = this.app.vault.getAbstractFileByPath(fileName);
-
-      if (!fileExists) {
-        const content = this.formatTweet(tweet);
-        await this.app.vault.create(fileName, content);
-        count++;
+      // Skip already-imported tweets by ID (not by filename): with configurable, non-unique formats a
+      // filename match can be a *different* tweet, so deciding on the name would silently drop notes.
+      if (this.isTweetImported(tweet)) {
+        this.importedIds.add(tweet.id);
+        continue;
       }
+      // A filename clash here is a *different* note — disambiguate with -N (same as the article-rename
+      // path) rather than skipping. Only mark imported once the note is actually written.
+      const desired = this.getFileName(tweet);
+      let fileName = desired;
+      let n = 1;
+      while (this.app.vault.getAbstractFileByPath(fileName)) {
+        fileName = desired.replace(/\.md$/, `-${n}.md`);
+        n++;
+      }
+      await this.app.vault.create(fileName, this.formatTweet(tweet));
+      count++;
       this.importedIds.add(tweet.id);
     }
     this.settings.lastSyncAt = new Date().toISOString();

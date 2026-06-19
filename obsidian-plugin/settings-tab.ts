@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type XBookmarksSync from './main';
+import type { FileNameFormat } from './types';
 
 export class XBookmarksSyncSettingTab extends PluginSettingTab {
   plugin: XBookmarksSync;
@@ -26,6 +27,20 @@ export class XBookmarksSyncSettingTab extends PluginSettingTab {
           } else {
             this.plugin.settings.defaultFolder = trimmed;
           }
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Note name format')
+      .setDesc('How imported note filenames are built; the title is byte-capped to stay within filesystem limits.')
+      .addDropdown(dd => dd
+        .addOption('date-author-title', 'Date – author – title')
+        .addOption('author-title', 'Author – title')
+        .addOption('date-title', 'Date – title')
+        .addOption('title-author', 'Title – author')
+        .setValue(this.plugin.settings.fileNameFormat)
+        .onChange(async (value) => {
+          this.plugin.settings.fileNameFormat = value as FileNameFormat;
           await this.plugin.saveSettings();
         }));
 
