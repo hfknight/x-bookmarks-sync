@@ -10,6 +10,7 @@ const TWEET_OR_ARTICLE_URL = /\/(?:status|article)\/\d+/;
 interface ElectronWebview extends HTMLElement {
   executeJavaScript(code: string): Promise<unknown>;
   insertCSS(css: string): Promise<string>;
+  loadURL(url: string): Promise<void>;
 }
 
 interface ExtractionResult {
@@ -819,7 +820,9 @@ export class XBookmarksView extends ItemView {
       // Navigate fresh to the bookmarks page so X starts a new API pagination
       // cursor from page 1. Reusing the existing page state causes X to serve
       // from its client-side cache which may have missed some bookmark pages.
-      this.webview.setAttribute('src', 'https://x.com/i/bookmarks');
+      // loadURL() forces a real reload even when the webview is already on this URL;
+      // a plain src= set is a no-op in that case, so a re-sync kept the stale feed.
+      void this.webview.loadURL('https://x.com/i/bookmarks').catch(() => {});
       await new Promise(resolve => window.setTimeout(resolve, 1500));
 
       // Reset observer state — authoritative reset for this run
