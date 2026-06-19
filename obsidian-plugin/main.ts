@@ -22,6 +22,12 @@ function toArticleUrl(url: string): string {
   return url.replace(/(\/[^/]+)\/status\/(\d+)/, '$1/article/$2');
 }
 
+// Escape a string for a YAML double-quoted scalar: backslashes first, then quotes (order matters —
+// escaping quotes first would then double-escape the backslashes we add).
+function yamlQuote(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
 export default class XBookmarksSync extends Plugin {
   importedIds: Set<string> = new Set();
   settings: XBookmarksSyncData = {
@@ -447,12 +453,12 @@ export default class XBookmarksSync extends Plugin {
 
   formatTweet(tweet: Tweet) {
     const date = new Date().toISOString().split('T')[0];
-    const safeId = `"${tweet.id}"`;
-    const safeAuthor = `"${(tweet.name || '').replace(/"/g, '\\"')}"`;
-    const safeUsername = `"${(tweet.username || '').replace(/"/g, '\\"')}"`;
-    const safeUrl = `"${tweet.url}"`;
+    const safeId = yamlQuote(tweet.id || '');
+    const safeAuthor = yamlQuote(tweet.name || '');
+    const safeUsername = yamlQuote(tweet.username || '');
+    const safeUrl = yamlQuote(tweet.url || '');
     const articleUrlLine = tweet.article
-      ? `\narticle_url: "${tweet.article.url.replace(/"/g, '\\"')}"`
+      ? `\narticle_url: ${yamlQuote(tweet.article.url)}`
       : '';
 
     const quotedSection = tweet.quoted ? renderQuotedSection(tweet.quoted) : '';
