@@ -258,7 +258,15 @@ export default class XBookmarksSync extends Plugin {
     // renamed to the title below, so "# Tweet by …" undersells it. Author stays in frontmatter. Leaves
     // a user-customized H1 (anything other than the generated "# Tweet by …") untouched. With the title
     // in the H1, the old "### {title}" line under "## Full article" would just duplicate it, so it's gone.
-    const body = title ? existing.replace(/^# Tweet by .*$/m, () => `# ${title}`) : existing;
+    let body = title ? existing.replace(/^# Tweet by .*$/m, () => `# ${title}`) : existing;
+    // The article's cover/lead image is captured as tweet media too, so it would show twice once the
+    // body is appended. Drop tweet-note images whose pbs.twimg media id also appears in the article
+    // body. (If the body has no real images — e.g. they didn't load — nothing matches and the tweet
+    // image is left intact.)
+    body = body.replace(
+      /\n*!\[\]\(https?:\/\/pbs\.twimg\.com\/media\/([A-Za-z0-9_-]+)[^)]*\)/g,
+      (match, mediaId) => (result.markdown.includes(mediaId) ? '' : match),
+    );
     await this.app.vault.modify(file, `${body}\n\n## Full article\n\n${result.markdown}\n`);
 
     let renamedTo: string | null = null;
