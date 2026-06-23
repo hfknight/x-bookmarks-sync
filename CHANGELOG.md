@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- **More reliable, complete sync** — bookmark capture now reads your list directly and in order instead of scrolling the page and collecting whatever happens to load. This removes the occasional missed bookmarks on re-sync and ensures long tweets always import their full text. If the direct method is ever unavailable, it automatically falls back to the previous scroll-based capture.
+- **Faster syncing** — capturing your bookmarks is now considerably quicker, especially for large collections.
+
 ## 1.1.12
 
 - **Choose your note filename format** — a new "Note name format" setting lets you pick how imported notes are named: Date – author – title (default), Author – title, Date – title, or Title – author. Long or non-Latin titles now stay within filesystem limits, and same-named imports no longer collide.
