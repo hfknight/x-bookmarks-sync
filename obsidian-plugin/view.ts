@@ -21,6 +21,16 @@ interface ExtractionResult {
   error?: string;
 }
 
+// One page of the cursor-pagination walk (parsed from the webview's JSON string).
+interface ApiPageResult {
+  status?: number;
+  cursor?: string | null;
+  newCount?: number;
+  total?: number;
+  ids?: string[];
+  error?: string;
+}
+
 export class XBookmarksView extends ItemView {
   plugin: XBookmarksSync;
   webview: ElectronWebview | null;
@@ -186,6 +196,27 @@ export class XBookmarksView extends ItemView {
                     }
                     text = text.replace(/\\s*https?:\\/\\/t\\.co\\/\\w+\\s*$/, '').trim();
                     var url = 'https://x.com/' + screenName + '/status/' + id;
+                    // Native X article shared as a post: GraphQL carries the card under
+                    // article.article_results.result (title + preview_text). The DOM scrape builds the
+                    // same card via __xbsFindArticle; parsing it here gives the API path full parity with
+                    // no per-permalink recovery. URL comes from the link entities (what X actually links
+                    // to), falling back to the canonical /article/ permalink built from the article id.
+                    var articleCard = null;
+                    try {
+                      var ar = obj.article && obj.article.article_results && obj.article.article_results.result;
+                      if (ar && ar.title) {
+                        var artUrl = '';
+                        for (var aj = 0; aj < urlEnts.length; aj++) {
+                          if (urlEnts[aj] && urlEnts[aj].expanded_url && /\\/article\\/\\d+/.test(urlEnts[aj].expanded_url)) { artUrl = urlEnts[aj].expanded_url; break; }
+                        }
+                        if (!artUrl) artUrl = 'https://x.com/' + screenName + '/article/' + (ar.rest_id || '');
+                        articleCard = { url: String(artUrl), title: String(ar.title), excerpt: String(ar.preview_text || '') };
+                        // An article post's body text is just the article link, which the "Linked
+                        // article" section already renders ("Read full article"). Strip it so the note
+                        // doesn't show a bare duplicate URL above the card.
+                        if (artUrl) text = text.split(artUrl).join('').trim();
+                      }
+                    } catch (e) {}
                     // Photo URLs + video/gif poster frames from extended_entities (preferred) or entities.media
                     var images = [];
                     var videoPosters = [];
@@ -215,10 +246,13 @@ export class XBookmarksView extends ItemView {
                       var keepPosters = videoPosters.length > 0 ? videoPosters : (prev && prev.videoPosters) || [];
                       if (keepImages.length > 0) entry.images = keepImages;
                       if (keepPosters.length > 0) entry.videoPosters = keepPosters;
+                      if (articleCard) entry.article = articleCard;
+                      else if (prev && prev.article) entry.article = prev.article;
                       window.__xbsApiCollected[id] = entry;
                     } else if (prev) {
                       if (images.length > (prev.images ? prev.images.length : 0)) prev.images = images;
                       if (videoPosters.length > (prev.videoPosters ? prev.videoPosters.length : 0)) prev.videoPosters = videoPosters;
+                      if (articleCard && !prev.article) prev.article = articleCard;
                     }
                     // Flag bookmarks that embed a quoted tweet so the recovery pass folds it in.
                     if (obj.quoted_status_result && window.__xbsApiCollected[id]) window.__xbsApiCollected[id].hasQuote = true;
@@ -240,6 +274,37 @@ export class XBookmarksView extends ItemView {
             }
           }
 
+          // Expose the parser so the cursor-pagination path reuses identical parsing
+          // (same note_tweet/media/quote handling — no drift from the passive path).
+          window.__xbsFindTweets = __xbsFindTweets;
+
+          // Capture the first Bookmarks GraphQL request as a live template: the URL carries
+          // the current queryId + features, the headers carry the bearer + csrf. Nothing is
+          // hardcoded — the cursor-pagination path replays this exact shape. auth_token is
+          // never read or stored; the browser attaches it on same-origin fetch.
+          function __xbsCaptureTemplate(url, headers) {
+            try {
+              if (window.__xbsReqTemplate) return;
+              if (typeof url !== 'string' || url.indexOf('/api/graphql/') === -1) return;
+              if (!/\\/Bookmarks\\?/.test(url)) return;
+              var h = {};
+              if (headers) {
+                if (typeof headers.forEach === 'function') {
+                  headers.forEach(function(v, k) { h[String(k).toLowerCase()] = v; });
+                } else if (Array.isArray(headers)) {
+                  for (var i = 0; i < headers.length; i++) {
+                    if (headers[i]) h[String(headers[i][0]).toLowerCase()] = headers[i][1];
+                  }
+                } else {
+                  for (var hk in headers) {
+                    if (Object.prototype.hasOwnProperty.call(headers, hk)) h[String(hk).toLowerCase()] = headers[hk];
+                  }
+                }
+              }
+              window.__xbsReqTemplate = { url: String(url), headers: h };
+            } catch (e) {}
+          }
+
           // XHR interceptor
           var __xbsOrigOpen = XMLHttpRequest.prototype.open;
           XMLHttpRequest.prototype.open = function(method, url) {
@@ -247,9 +312,19 @@ export class XBookmarksView extends ItemView {
             return __xbsOrigOpen.apply(this, arguments);
           };
 
+          var __xbsOrigSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+          XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+            try {
+              if (!this.__xbsHeaders) this.__xbsHeaders = {};
+              this.__xbsHeaders[String(name).toLowerCase()] = value;
+            } catch (e) {}
+            return __xbsOrigSetHeader.apply(this, arguments);
+          };
+
           var __xbsOrigSend = XMLHttpRequest.prototype.send;
           XMLHttpRequest.prototype.send = function() {
             if (this.__xbsUrl && this.__xbsUrl.indexOf('/api/graphql/') !== -1) {
+              __xbsCaptureTemplate(this.__xbsUrl, this.__xbsHeaders);
               var xhrSelf = this;
               xhrSelf.addEventListener('load', function() {
                 try {
@@ -276,6 +351,10 @@ export class XBookmarksView extends ItemView {
           var __xbsOrigFetch = window.fetch;
           window.fetch = function(input, init) {
             var url = typeof input === 'string' ? input : (input && input.url) ? input.url : String(input);
+            try {
+              var fh = (init && init.headers) || (input && typeof input === 'object' && input.headers) || null;
+              __xbsCaptureTemplate(url, fh);
+            } catch (e) {}
             var p = __xbsOrigFetch.apply(this, arguments);
             if (url.indexOf('/api/graphql/') !== -1) {
               p = p.then(function(resp) {
@@ -295,6 +374,208 @@ export class XBookmarksView extends ItemView {
         }
         void 0;
       `;
+  }
+
+  // Webview-side cursor-pagination helper, installed once. window.__xbsFetchBookmarkPage(cursor)
+  // replays the captured Bookmarks request shape with count=100 + the given cursor, runs the
+  // shared parser into __xbsApiCollected, and returns a JSON string {status,cursor,newCount,total}.
+  private getPaginationScript(): string {
+    return `
+      if (!window.__xbsFetchBookmarkPage) {
+        function __xbsFindBottomCursor(obj, depth) {
+          if (!obj || typeof obj !== 'object' || depth > 25) return null;
+          if (obj.cursorType === 'Bottom' && typeof obj.value === 'string') return obj.value;
+          if (Array.isArray(obj)) {
+            for (var i = 0; i < obj.length; i++) {
+              var r = __xbsFindBottomCursor(obj[i], depth + 1);
+              if (r) return r;
+            }
+          } else {
+            for (var k in obj) {
+              if (Object.prototype.hasOwnProperty.call(obj, k)) {
+                var r2 = __xbsFindBottomCursor(obj[k], depth + 1);
+                if (r2) return r2;
+              }
+            }
+          }
+          return null;
+        }
+
+        window.__xbsFetchBookmarkPage = async function(cursor) {
+          try {
+            var tmpl = window.__xbsReqTemplate;
+            if (!tmpl || !tmpl.url) return JSON.stringify({ error: 'no-template' });
+
+            var u = new URL(tmpl.url);
+            var variables = {};
+            try { variables = JSON.parse(u.searchParams.get('variables') || '{}'); } catch (e) {}
+            variables.count = 100;
+            variables.includePromotedContent = false;
+            if (cursor) variables.cursor = cursor; else delete variables.cursor;
+            u.searchParams.set('variables', JSON.stringify(variables));
+
+            // Replay the captured headers verbatim, minus the per-request transaction id (the one
+            // header X derives per call). Refresh csrf from the live cookie; fall back to the static
+            // public web bearer only if none was captured. auth_token is never read — same-origin
+            // fetch attaches it automatically.
+            var headers = {};
+            var th = tmpl.headers || {};
+            for (var hk in th) { if (Object.prototype.hasOwnProperty.call(th, hk)) headers[hk] = th[hk]; }
+            delete headers['x-client-transaction-id'];
+            var ct0 = (document.cookie.match(/(?:^|; )ct0=([^;]+)/) || [])[1];
+            if (ct0) headers['x-csrf-token'] = decodeURIComponent(ct0);
+            if (!headers['authorization']) headers['authorization'] = 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+
+            var beforeKeys = Object.keys(window.__xbsApiCollected || {});
+            var beforeSet = {};
+            for (var bi = 0; bi < beforeKeys.length; bi++) beforeSet[beforeKeys[bi]] = 1;
+            var resp = await fetch(u.toString(), { method: 'GET', headers: headers, credentials: 'include' });
+            var status = resp.status;
+            if (status !== 200) return JSON.stringify({ status: status });
+            var data = await resp.json();
+            if (window.__xbsFindTweets) window.__xbsFindTweets(data, 0);
+            var afterKeys = Object.keys(window.__xbsApiCollected || {});
+            // Ids new to this page (no cross-page overlap, so these are the page's tweet ids) —
+            // used by the caller for the incremental "Sync from last" waterline stop.
+            var addedIds = afterKeys.filter(function(k) { return !beforeSet[k]; });
+            var bottom = __xbsFindBottomCursor(data, 0);
+            return JSON.stringify({ status: status, cursor: bottom || null, newCount: addedIds.length, total: afterKeys.length, ids: addedIds });
+          } catch (e) {
+            return JSON.stringify({ error: String((e && e.message) || e) });
+          }
+        };
+      }
+      void 0;
+    `;
+  }
+
+  // Deterministic capture (Milestone 1): replay the page's own Bookmarks request and walk the
+  // cursor to the end of the list. Returns null when no request template was captured (caller
+  // falls back to passive scroll). Reuses __xbsApiCollected + the shared parser, so the
+  // downstream rendering/dedup path is unchanged.
+  private async paginateViaApi(incremental: boolean): Promise<{ tweets: Tweet[]; pages: number; hit429: boolean; stoppedReason: string } | null> {
+    if (!this.webview) return null;
+
+    const tmplJson = await this.webview.executeJavaScript(
+      '(function(){ try { return JSON.stringify(window.__xbsReqTemplate || null); } catch(e){ return "null"; } })()'
+    ) as string;
+    const tmpl = (tmplJson ? JSON.parse(tmplJson) : null) as { url?: string } | null;
+    if (!tmpl || !tmpl.url) return null;
+
+    await this.webview.executeJavaScript(this.getPaginationScript());
+    // Start from a clean collection so the count reflects only what pagination retrieved.
+    await this.webview.executeJavaScript('window.__xbsApiCollected = {};');
+
+    let cursor: string | null = null;
+    let pages = 0;
+    let hit429 = false;
+    let stoppedReason = 'end-of-list';
+    const seenCursors = new Set<string>();
+    const MAX_PAGES = 500;
+
+    const fetchPage = async (c: string | null): Promise<ApiPageResult> => {
+      const raw = await this.webview!.executeJavaScript(
+        `window.__xbsFetchBookmarkPage(${JSON.stringify(c)})`
+      ) as string;
+      try { return JSON.parse(raw) as ApiPageResult; } catch { return { error: 'bad-json' }; }
+    };
+
+    while (pages < MAX_PAGES) {
+      if (this.cancelRequested || !this.currentUrl.includes('/bookmarks')) {
+        stoppedReason = 'cancelled';
+        break;
+      }
+
+      let page = await fetchPage(cursor);
+
+      // Rate-limited: bounded exponential backoff (2s,4s,8s,16s,32s), retrying the same cursor.
+      // Check cancel between waits so a cancel during a long backoff is honored promptly.
+      if (page.status === 429) {
+        hit429 = true;
+        for (let attempt = 0; attempt < 5 && page.status === 429; attempt++) {
+          await new Promise(resolve => window.setTimeout(resolve, 2000 * Math.pow(2, attempt)));
+          if (this.cancelRequested) { stoppedReason = 'cancelled'; break; }
+          page = await fetchPage(cursor);
+        }
+        if (stoppedReason === 'cancelled') break;
+        if (page.status === 429) { stoppedReason = 'rate-limited'; break; }
+      }
+
+      if (page.error) { stoppedReason = 'error:' + page.error; break; }
+      if (page.status && page.status !== 200) { stoppedReason = 'http-' + page.status; break; }
+
+      pages++;
+      this.setScrollingToolbar(page.total ?? 0);
+
+      // Incremental "Sync from last" waterline: bookmarks are newest-first, so the first full
+      // page whose ids are all already imported means everything below is older/already-imported.
+      // Deterministic pagination needs no multi-iteration buffer (unlike the virtualized scroll path).
+      if (incremental && (page.ids?.length ?? 0) > 0 && page.ids!.every(id => this.plugin.importedIds.has(id))) {
+        stoppedReason = 'incremental-waterline';
+        break;
+      }
+
+      const next = page.cursor || null;
+      if (!next) { stoppedReason = 'no-cursor'; break; }
+      if (next === cursor || seenCursors.has(next)) { stoppedReason = 'cursor-repeat'; break; }
+      if ((page.newCount ?? 0) === 0) { stoppedReason = 'no-new'; break; }
+
+      seenCursors.add(next);
+      cursor = next;
+      // Modest pacing between pages.
+      await new Promise(resolve => window.setTimeout(resolve, 400));
+    }
+
+    if (pages >= MAX_PAGES) stoppedReason = 'page-cap';
+
+    const apiJson = await this.webview.executeJavaScript(
+      '(function(){ try { return JSON.stringify(Object.values(window.__xbsApiCollected || {})); } catch(e){ return "[]"; } })()'
+    ) as string;
+    const tweets = (apiJson ? JSON.parse(apiJson) : []) as Tweet[];
+
+    return { tweets, pages, hit429, stoppedReason };
+  }
+
+  // Capture path A (primary): wait for the interceptor to stash the page's own Bookmarks request
+  // as a template, then walk the cursor to end-of-list. Populates collectedBookmarks and returns
+  // 'captured'. Returns 'fallback' when no template is captured or the walk ends on an error/limit
+  // (caller runs the scroll path instead), or 'cancelled' if the user cancelled mid-walk.
+  private async tryApiCapture(incremental: boolean): Promise<'captured' | 'fallback' | 'cancelled'> {
+    if (!this.webview) return 'fallback';
+
+    let hasTemplate = false;
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline) {
+      if (this.cancelRequested) return 'cancelled';
+      try {
+        const has = await this.webview.executeJavaScript(
+          '(function(){ try { return !!(window.__xbsReqTemplate && window.__xbsReqTemplate.url); } catch(e){ return false; } })()'
+        ) as boolean;
+        if (has) { hasTemplate = true; break; }
+      } catch { /* webview mid-navigation — retry next tick */ }
+      await new Promise(resolve => window.setTimeout(resolve, 400));
+    }
+    if (!hasTemplate) {
+      console.log('[x-bookmarks] no Bookmarks request template captured — using scroll capture.');
+      return 'fallback';
+    }
+
+    const result = await this.paginateViaApi(incremental);
+    if (!result) return 'fallback';
+    if (result.stoppedReason === 'cancelled') return 'cancelled';
+
+    // Only trust a clean end-of-list (or the incremental waterline / page-cap guardrail). An
+    // error/429 stop means X tightened enforcement or drifted — discard the partial result and
+    // let the scroll path do it (the design's graceful fallback).
+    const CLEAN_STOPS = new Set(['end-of-list', 'no-cursor', 'no-new', 'cursor-repeat', 'incremental-waterline', 'page-cap']);
+    if (!CLEAN_STOPS.has(result.stoppedReason)) {
+      console.warn(`[x-bookmarks] API capture incomplete (${result.stoppedReason}) — falling back to scroll.`);
+      return 'fallback';
+    }
+
+    for (const tweet of result.tweets) this.mergeBookmark(tweet);
+    console.log(`[x-bookmarks] API capture: ${result.tweets.length} bookmarks · ${result.pages} pages · stop ${result.stoppedReason}${result.hit429 ? ' · hit 429' : ''}`);
+    return 'captured';
   }
 
   updateToolbar() {
@@ -386,6 +667,7 @@ export class XBookmarksView extends ItemView {
 
     try {
       for (let i = 0; i < targets.length; i++) {
+        if (this.cancelRequested) return;
         const t = targets[i];
         if (this.hintSpan) this.hintSpan.setText(`Recovering full text… ${i + 1}/${targets.length}`);
         try {
@@ -471,6 +753,7 @@ export class XBookmarksView extends ItemView {
     if (candidates.length === 0) return;
 
     for (let i = 0; i < candidates.length; i++) {
+      if (this.cancelRequested) return;
       const t = candidates[i];
       if (this.hintSpan) this.hintSpan.setText(`Recovering video thumbnails… ${i + 1}/${candidates.length}`);
       const posters = await this.fetchSyndicationPosters(t.id);
@@ -529,6 +812,7 @@ export class XBookmarksView extends ItemView {
     if (candidates.length === 0) return;
 
     for (let i = 0; i < candidates.length; i++) {
+      if (this.cancelRequested) return;
       const t = candidates[i];
       if (this.hintSpan) this.hintSpan.setText(`Recovering quoted tweets… ${i + 1}/${candidates.length}`);
       const quoted = await this.fetchSyndicationQuote(t.id);
@@ -566,6 +850,7 @@ export class XBookmarksView extends ItemView {
     if (candidates.length === 0) return;
 
     for (let i = 0; i < candidates.length; i++) {
+      if (this.cancelRequested) return;
       const t = candidates[i];
       if (this.hintSpan) this.hintSpan.setText(`Resolving article titles… ${i + 1}/${candidates.length}`);
       const title = await this.fetchSyndicationArticleTitle(t.id);
@@ -824,6 +1109,26 @@ export class XBookmarksView extends ItemView {
       // a plain src= set is a no-op in that case, so a re-sync kept the stale feed.
       void this.webview.loadURL('https://x.com/i/bookmarks').catch(() => {});
       await new Promise(resolve => window.setTimeout(resolve, 1500));
+
+      // Primary: deterministic cursor pagination. On 'captured' we skip straight to the shared
+      // finalize tail; on 'fallback' we flow into today's scroll path below (worst case = current
+      // behavior); on 'cancelled' we bail like the scroll path's cancel branch.
+      const apiStatus = await this.tryApiCapture(incrementalMode);
+      if (apiStatus === 'cancelled') {
+        await this.cleanup();
+        this.cancelRequested = false;
+        this.isScrolling = false;
+        if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
+        this.updateToolbar();
+        // Distinguish navigate-away from a deliberate Cancel click (same parity as the scroll path).
+        if (!this.currentUrl.includes('/bookmarks')) new Notice('Navigated away — bookmark capture cancelled.');
+        return;
+      }
+      if (apiStatus === 'captured') {
+        await this.finalizeCapture(overrideActiveThisRun, fullScanOverride);
+        return;
+      }
+      // apiStatus === 'fallback' — run the passive scroll capture exactly as before.
 
       // Reset observer state — authoritative reset for this run
       await this.webview.executeJavaScript('window.__newTweetsAppeared = false; window.__xbsCollected = {}; window.__xbsObserverInstalled = false;');
@@ -1139,54 +1444,7 @@ export class XBookmarksView extends ItemView {
         }
       } catch { /* webview may be gone */ }
 
-      // After loop
-      await this.cleanup();
-      // Recover any bookmarks whose full body the API interceptor missed (X served only the
-      // truncated "Show more" preview). Detected structurally via tweet-text-show-more-link.
-      await this.recoverTruncatedBookmarks();
-      // Recover video/GIF poster frames the interceptor missed (flagged hasVideo, no videoPosters).
-      await this.recoverVideoPosters();
-      // Fold embedded quoted tweets into their parent notes (flagged hasQuote, no quoted yet).
-      await this.recoverQuotedTweets();
-      // Resolve real article titles so article-link bookmarks get meaningful note filenames.
-      await this.recoverArticleTitles();
-      this.isScrolling = false;
-      if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
-      this.updateToolbar();
-
-      // Consume the one-shot full-scan flag now that the scroll reached the bottom.
-      // Cancel/navigate-away paths return early above and leave the flag set so the next attempt retries.
-      if (fullScanOverride) {
-        this.plugin.settings.forceFullScanOnNextSync = false;
-        await this.plugin.saveSettings();
-      }
-
-      if (this.collectedBookmarks.size === 0) {
-        new Notice('No bookmarks found.');
-        return;
-      }
-
-      const count = this.collectedBookmarks.size;
-      if (this.hintSpan) {
-        this.hintSpan.setText(`Preparing ${count} bookmark${count !== 1 ? 's' : ''}…`);
-      }
-      // Yield so the "Preparing…" text actually paints before the modal's synchronous
-      // DOM build (300+ items) takes the main thread again.
-      await new Promise(resolve => window.setTimeout(resolve, 16));
-
-      const modal = new BookmarkSelectionModal(
-        this.app,
-        this.plugin,
-        Array.from(this.collectedBookmarks.values())
-      );
-      // Reset to incremental mode only after the user actually confirms import,
-      // not on extraction completion — avoids flipping the checkbox if the modal is cancelled.
-      modal.onImportComplete = () => {
-        this.incrementalMode = true;
-        if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = true;
-      };
-      modal.onDidClose = () => { this.updateToolbar(); };
-      modal.open();
+      await this.finalizeCapture(overrideActiveThisRun, fullScanOverride);
 
     } catch (err) {
       console.error('autoScrollAndExtract error:', err);
@@ -1196,6 +1454,72 @@ export class XBookmarksView extends ItemView {
       this.updateToolbar();
       new Notice('Error during bookmark capture.');
     }
+  }
+
+  // Shared tail for both capture paths: clean up the observer, run the syndication/hidden-webview
+  // recovery passes, then present the selection modal. overrideActiveThisRun/fullScanOverride mirror
+  // the locals in autoScrollAndExtract so the "Sync from last" checkbox and one-shot full-scan flag
+  // resolve identically regardless of which path captured the bookmarks.
+  private async finalizeCapture(overrideActiveThisRun: boolean, fullScanOverride: boolean): Promise<void> {
+    await this.cleanup();
+    // Recover any bookmarks whose full body the API interceptor missed (X served only the
+    // truncated "Show more" preview). Detected structurally via tweet-text-show-more-link.
+    await this.recoverTruncatedBookmarks();
+    // Recover video/GIF poster frames the interceptor missed (flagged hasVideo, no videoPosters).
+    await this.recoverVideoPosters();
+    // Fold embedded quoted tweets into their parent notes (flagged hasQuote, no quoted yet).
+    await this.recoverQuotedTweets();
+    // Resolve real article titles so article-link bookmarks get meaningful note filenames.
+    await this.recoverArticleTitles();
+
+    // Cancelled during a recovery pass (each checks cancelRequested) → abort without presenting,
+    // matching the scroll-loop cancel: a cancel discards the run. Leave forceFullScanOnNextSync set
+    // so the next attempt retries it.
+    if (this.cancelRequested) {
+      this.cancelRequested = false;
+      this.isScrolling = false;
+      if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
+      this.updateToolbar();
+      return;
+    }
+
+    this.isScrolling = false;
+    if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
+    this.updateToolbar();
+
+    // Consume the one-shot full-scan flag now that capture reached the end.
+    // Cancel/navigate-away paths return early and leave the flag set so the next attempt retries.
+    if (fullScanOverride) {
+      this.plugin.settings.forceFullScanOnNextSync = false;
+      await this.plugin.saveSettings();
+    }
+
+    if (this.collectedBookmarks.size === 0) {
+      new Notice('No bookmarks found.');
+      return;
+    }
+
+    const count = this.collectedBookmarks.size;
+    if (this.hintSpan) {
+      this.hintSpan.setText(`Preparing ${count} bookmark${count !== 1 ? 's' : ''}…`);
+    }
+    // Yield so the "Preparing…" text actually paints before the modal's synchronous
+    // DOM build (300+ items) takes the main thread again.
+    await new Promise(resolve => window.setTimeout(resolve, 16));
+
+    const modal = new BookmarkSelectionModal(
+      this.app,
+      this.plugin,
+      Array.from(this.collectedBookmarks.values())
+    );
+    // Reset to incremental mode only after the user actually confirms import,
+    // not on extraction completion — avoids flipping the checkbox if the modal is cancelled.
+    modal.onImportComplete = () => {
+      this.incrementalMode = true;
+      if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = true;
+    };
+    modal.onDidClose = () => { this.updateToolbar(); };
+    modal.open();
   }
 
 }

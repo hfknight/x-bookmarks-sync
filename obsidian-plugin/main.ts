@@ -430,7 +430,11 @@ export default class XBookmarksSync extends Plugin {
   }
 
   getFileName(tweet: Tweet): string {
-    return this.buildFileNameInDir(this.settings.defaultFolder, tweet.id, tweet.name, tweet.articleTitle || tweet.text);
+    // Prefer a real article title (syndication `articleTitle`, else the linked-article card title)
+    // over the tweet text — an article post's text is just the article link (and is stripped from
+    // the body), so without this the note would be named "Bookmark".
+    const title = tweet.articleTitle || tweet.article?.title || tweet.text;
+    return this.buildFileNameInDir(this.settings.defaultFolder, tweet.id, tweet.name, title);
   }
 
   private buildFileNameInDir(dir: string, id: string, authorRaw: string, titleRaw: string): string {
@@ -530,6 +534,10 @@ export default class XBookmarksSync extends Plugin {
         .join('\n\n')
       : '';
 
+    // Strip leading newlines so an article post (empty body text — the link lives in the card)
+    // doesn't leave blank lines between the H1 and the first section.
+    const body = `${tweet.text}${imagesSection}${videosSection}${quotedSection}${articleSection}`.replace(/^\n+/, '');
+
     return `---
 id: ${safeId}
 author: ${safeAuthor}
@@ -542,7 +550,7 @@ tags: [${this.settings.defaultTags.join(', ')}]
 
 # Tweet by ${tweet.name} (${tweet.username})
 
-${tweet.text}${imagesSection}${videosSection}${quotedSection}${articleSection}
+${body}
 
 [View on X](${tweet.url}) | [Open in Obsidian Webview](obsidian://x-bookmarks?url=${encodeURIComponent(tweet.url)})
 `;
