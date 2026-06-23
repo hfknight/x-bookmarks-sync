@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+
+- **Scan animation while syncing** — capturing your bookmarks now shows a live scanning overlay with a running count and a **Cancel** button, instead of visibly scrolling the page, so it's clear the sync is working. It uses your theme's accent color.
+- **Steadier syncs** — improved how a sync starts so it more reliably uses the fast, complete capture path before falling back.
+
 ## 1.2.0
 
 - **More reliable, complete sync** — bookmark capture now reads your list directly and in order instead of scrolling the page and collecting whatever happens to load. This removes the occasional missed bookmarks on re-sync and ensures long tweets always import their full text. If the direct method is ever unavailable, it automatically falls back to the previous scroll-based capture.
