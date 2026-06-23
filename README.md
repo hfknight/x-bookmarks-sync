@@ -8,20 +8,15 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 
 ## Features
 
-- **No API key required** — works by scraping the loaded page via an embedded webview; piggybacks on your existing X session
-- **Selective import** — choose exactly which bookmarks to save from a checklist modal
-- **Incremental sync** — "Sync from last" mode scrolls only until it reaches already-imported bookmarks, so large libraries stay fast
-- **Duplicate detection** — already-imported bookmarks are grayed out and skipped automatically
-- **Long tweets supported** — premium long-form posts are imported in full, not truncated at the visible "Show more" cutoff
-- **Images embedded** — photo attachments on bookmarked tweets are saved as Markdown image links to the X CDN
-- **Videos & GIFs** — the poster thumbnail is embedded with a **▶ Video** link to X's video viewer (the stream itself isn't downloaded)
-- **Quoted tweets folded in** — a bookmark that quotes another tweet shows the quoted author, text, and media inline under a **Quoted tweet** heading, instead of importing the quote as a separate note
-- **Import X article body** — for tweets that are native X long-form articles, fetch the full article body into the note and rename the file to the article title (right-click in note, command palette, or toolbar button while viewing the article)
-- **Re-import on next sync** — delete a single bookmark from history with one click and have it re-imported on the next sync
-- **Copy main content** — clipboard-copy the focal tweet/article from the webview, replies stripped, powered by [Defuddle](https://github.com/kepano/defuddle)
-- **Configurable folder & tags** — set where notes land and what tags are applied in plugin settings
-- **Structured Markdown notes** — each bookmark is saved with YAML frontmatter (id, author, url, tags, date)
-- **Deep-link back** — each note includes an `obsidian://` link to re-open the tweet in the webview
+- **No API key required** — runs in an embedded webview using your existing X session; no OAuth, no tokens to manage
+- **Complete, reliable capture** — reads your bookmark list directly instead of scrolling the page, so large libraries sync quickly and nothing is missed
+- **Import X article body** — for native X long-form articles, pull the full article text into the note and rename it to the article's title (right-click, command palette, or toolbar button)
+- **Incremental sync** — "Sync from last" stops as soon as it reaches already-imported bookmarks, for quick top-ups
+- **Selective import** — choose exactly which bookmarks to save from a checklist; already-imported ones are grayed out and skipped
+- **Rich content** — full long-form text, images, and video/GIF thumbnails; quoted tweets are folded inline under a **Quoted tweet** heading
+- **Structured Markdown notes** — YAML frontmatter, configurable folder / tags / filename format, and an `obsidian://` deep-link back to the tweet
+- **Re-import on next sync** — refresh a single note with one click to pick up newer fields
+- **Copy main content** — clipboard-copy the focal tweet/article with replies stripped, powered by [Defuddle](https://github.com/kepano/defuddle)
 
 > **Desktop only.** This plugin uses Electron's `<webview>` tag, which is not available in Obsidian mobile.
 
@@ -34,14 +29,14 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 1. Click the **X Bookmarks Sync icon** in the Obsidian ribbon (or run the command **Open X Bookmarks View**).
 2. A side panel opens with X.com loaded. Log in to your account if prompted.
 3. Navigate to your **Bookmarks page**.
-4. Click **Extract Bookmarks** in the panel toolbar. The plugin will automatically scroll through your bookmarks to collect them.
+4. Click **Extract bookmarks** in the panel toolbar. A scan overlay appears while the plugin reads your bookmarks directly — no scrolling, and you can **Cancel** anytime.
 5. A selection modal appears listing all visible bookmarks. New ones are pre-checked; already-imported ones are grayed out.
 6. Check or uncheck as needed, then click **Import Selected**.
 7. Notes appear in your configured bookmarks folder (default: `x-bookmarks/`).
 
 ### Sync from last (incremental mode)
 
-Check **Sync from last** in the toolbar before clicking **Extract Bookmarks**. The plugin will automatically stop scrolling once it encounters a bookmark that has already been imported — ideal for regular top-up syncs without traversing your entire history.
+Check **Sync from last** in the toolbar before clicking **Extract bookmarks**. The plugin stops as soon as it reaches bookmarks you've already imported — ideal for regular top-up syncs without re-reading your entire history.
 
 > **First sync:** The checkbox is unchecked by default until you have completed at least one full sync. This ensures your entire bookmark history is captured on the first run.
 
@@ -92,6 +87,7 @@ Open **Settings → X Bookmarks Sync** to configure:
 |---|---|---|
 | **Default folder** | Vault folder where bookmark notes are saved | `x-bookmarks` |
 | **Default tags** | Tags applied to every imported note (chip UI — press Enter to add) | `twitter`, `bookmark` |
+| **Note name format** | How note filenames are built — Date – author – title, Author – title, Date – title, or Title – author | Date – author – title |
 | **Last sync** | Timestamp of the most recent successful import (read-only) | — |
 | **Clear import history** | Removes all tracked import IDs, allowing previously imported bookmarks to be re-imported | — |
 
@@ -150,7 +146,8 @@ Each saved bookmark becomes a Markdown file. Optional sections are added when th
 id: "1234567890"
 author: "Display Name"
 username: "@handle"
-scraped_date: 2024-01-15
+published: 2024-01-12       # the tweet's original post date
+scraped_date: 2024-01-15    # when it was imported
 url: "https://x.com/handle/status/1234567890"
 article_url: "https://x.com/handle/article/1234567890"   # only if the tweet links to an X article
 tags: [twitter, bookmark]
@@ -188,14 +185,14 @@ Short excerpt rendered in the card…
 …full Defuddle-extracted article body…
 ```
 
-**File naming:** `{folder}/{YYYY-MM-DD}-{author}-{first 40 chars of tweet}.md`. After **Import X article body** runs, the title segment is replaced with the article's actual title (sanitized, truncated to 40 chars); the date and author prefix are preserved.
+**File naming:** configurable via the **Note name format** setting (default `{date}-{author}-{title}`). The title comes from the tweet's text — or the article's title for bookmarked X articles. **Import X article body** renames the note to the article's title. All names are sanitized and length-capped to stay within filesystem limits.
 
 ---
 
 ## Limitations
 
 - **Desktop only** — requires Electron's `<webview>` tag, not available in Obsidian mobile.
-- **Subject to X.com DOM changes** — if X changes their markup, the scraper selectors may need updating.
+- **Subject to X.com changes** — the plugin uses X's internal data API (with a page-scraping fallback); major changes on X's side may require a plugin update.
 - **Video/GIF streams not downloaded** — the poster thumbnail is embedded with a **▶ Video** link to the tweet's video viewer on X, but the video file itself isn't saved locally.
 - **CDN-hosted images** — embedded images reference X's CDN (`pbs.twimg.com`). If X removes the image, the link in your note breaks. Local-download support is planned.
 - **Existing notes don't backfill new fields** — when you upgrade and gain new features (like long-tweet text or image embedding), already-imported notes stay as they were. Use **Re-import this bookmark on next sync** to refresh individual notes, or **Clear import history** to wipe everything and re-sync.
