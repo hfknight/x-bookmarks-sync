@@ -40,6 +40,8 @@ export class XBookmarksView extends ItemView {
   closeBtn: HTMLButtonElement;
   currentUrl: string = 'https://x.com/i/bookmarks';
   hintSpan: HTMLElement | null = null;
+  scanOverlay: HTMLElement | null = null;
+  scanLabel: HTMLElement | null = null;
   isScrolling: boolean = false;
   cancelRequested: boolean = false;
   collectedBookmarks: Map<string, Tweet> = new Map();
@@ -130,6 +132,15 @@ export class XBookmarksView extends ItemView {
       cls: 'x-bookmarks-webview',
       attr: { src: this.currentUrl },
     }) as unknown as ElectronWebview;
+
+    // Scan overlay shown over the (headlessly driven) webview during a capture so progress is
+    // legible even when the page doesn't visibly scroll. Built once, toggled via is-hidden.
+    this.scanOverlay = webviewContainer.createDiv({ cls: 'x-bookmarks-scan-overlay is-hidden' });
+    this.scanOverlay.createDiv({ cls: 'x-bookmarks-scan-grid' });
+    const dots = this.scanOverlay.createDiv({ cls: 'x-bookmarks-scan-dots' });
+    for (let i = 0; i < 14; i++) dots.createDiv({ cls: 'x-bookmarks-scan-dot' });
+    this.scanOverlay.createDiv({ cls: 'x-bookmarks-scan-line' });
+    this.scanLabel = this.scanOverlay.createDiv({ cls: 'x-bookmarks-scan-label', text: 'Scanning bookmarks…' });
 
     this.webview.addEventListener('did-navigate', (e: Event & { url: string }) => {
       this.currentUrl = e.url;
@@ -543,19 +554,45 @@ export class XBookmarksView extends ItemView {
   private async tryApiCapture(incremental: boolean): Promise<'captured' | 'fallback' | 'cancelled'> {
     if (!this.webview) return 'fallback';
 
-    let hasTemplate = false;
-    const deadline = Date.now() + 12000;
-    while (Date.now() < deadline) {
-      if (this.cancelRequested) return 'cancelled';
+    // Poll for the interceptor to stash the page's own Bookmarks request as a template.
+    const pollTemplate = async (ms: number): Promise<'found' | 'cancelled' | 'timeout'> => {
+      const deadline = Date.now() + ms;
+      while (Date.now() < deadline) {
+        if (this.cancelRequested) return 'cancelled';
+        try {
+          const has = await this.webview!.executeJavaScript(
+            '(function(){ try { return !!(window.__xbsReqTemplate && window.__xbsReqTemplate.url); } catch(e){ return false; } })()'
+          ) as boolean;
+          if (has) return 'found';
+        } catch { /* webview mid-navigation — retry next tick */ }
+        await new Promise(resolve => window.setTimeout(resolve, 400));
+      }
+      return 'timeout';
+    };
+
+    let phase = await pollTemplate(10000);
+    if (phase === 'timeout') {
+      // X sometimes serves the bookmarks page from client cache with no network request, so the
+      // interceptor has nothing to template off of. Nudge it: a scroll triggers a fresh Bookmarks
+      // request (the next page) that the interceptor captures. Scroll position is irrelevant to the
+      // API walk; if we still fall back to scroll, we reset to the top below so that path starts clean.
       try {
-        const has = await this.webview.executeJavaScript(
-          '(function(){ try { return !!(window.__xbsReqTemplate && window.__xbsReqTemplate.url); } catch(e){ return false; } })()'
-        ) as boolean;
-        if (has) { hasTemplate = true; break; }
-      } catch { /* webview mid-navigation — retry next tick */ }
-      await new Promise(resolve => window.setTimeout(resolve, 400));
+        await this.webview.executeJavaScript(
+          '(function(){ window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)); var b=null,h=0; document.querySelectorAll("div").forEach(function(el){ if(el.scrollHeight>el.clientHeight+200){var s=getComputedStyle(el); if((s.overflowY==="scroll"||s.overflowY==="auto")&&el.scrollHeight>h){b=el;h=el.scrollHeight;}} }); if(b)b.scrollTop=b.scrollHeight; })()'
+        );
+      } catch { /* webview gone — the next poll times out and we fall back */ }
+      phase = await pollTemplate(6000);
+      if (phase === 'timeout') {
+        // Going to scroll-capture: undo the nudge scroll so the scroll path starts from the top.
+        try {
+          await this.webview.executeJavaScript(
+            '(function(){ window.scrollTo(0,0); var b=null,h=0; document.querySelectorAll("div").forEach(function(el){ if(el.scrollHeight>el.clientHeight+200){var s=getComputedStyle(el); if((s.overflowY==="scroll"||s.overflowY==="auto")&&el.scrollHeight>h){b=el;h=el.scrollHeight;}} }); if(b)b.scrollTop=0; })()'
+          );
+        } catch { /* ignore */ }
+      }
     }
-    if (!hasTemplate) {
+    if (phase === 'cancelled') return 'cancelled';
+    if (phase === 'timeout') {
       console.log('[x-bookmarks] no Bookmarks request template captured — using scroll capture.');
       return 'fallback';
     }
@@ -578,9 +615,25 @@ export class XBookmarksView extends ItemView {
     return 'captured';
   }
 
+  // Reveal the scan surface and hide the live page (kept functional at opacity:0). Called when a
+  // capture starts.
+  private showScanOverlay() {
+    if (this.scanLabel) this.scanLabel.setText('Scanning bookmarks…');
+    this.scanOverlay?.removeClass('is-hidden');
+    this.webview?.addClass('is-dimmed');
+  }
+
+  // Restore the page. Driven from updateToolbar (called at every capture exit once isScrolling is
+  // cleared), so the overlay can never outlive a run regardless of how it ended.
+  private hideScanOverlay() {
+    this.scanOverlay?.addClass('is-hidden');
+    this.webview?.removeClass('is-dimmed');
+  }
+
   updateToolbar() {
     if (!this.hintSpan) return;  // guard against calls before onOpen() completes
     if (this.isScrolling) return; // don't clobber scrolling state
+    this.hideScanOverlay();      // not scrolling → no capture in flight → page visible
 
     if (this.currentUrl.includes('/bookmarks')) {
       const hint = this.incrementalMode ? 'Incremental' : 'Full scan';
@@ -1048,6 +1101,7 @@ export class XBookmarksView extends ItemView {
     this.extractBtn.innerText = 'Cancel';
     this.extractBtn.onclick = () => { this.cancelRequested = true; };
     if (this.syncFromLastLabel) this.syncFromLastLabel.toggleClass('is-hidden', true);
+    if (this.scanLabel) this.scanLabel.setText(count > 0 ? `Scanning bookmarks… ${count} found` : 'Scanning bookmarks…');
   }
 
   private async pollFlag(): Promise<boolean> {
@@ -1101,6 +1155,7 @@ export class XBookmarksView extends ItemView {
       }
 
       this.setScrollingToolbar(0);
+      this.showScanOverlay();
 
       // Navigate fresh to the bookmarks page so X starts a new API pagination
       // cursor from page 1. Reusing the existing page state causes X to serve
