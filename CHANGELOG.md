@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+
+- **"Open in Obsidian Webview" links now land on the right tweet** — clicking a note's Obsidian Webview link (or any `obsidian://x-bookmarks` link) while the X bookmarks panel was open but hidden in the sidebar could open your bookmarks list instead of the tweet. It now navigates straight to the tweet.
+
 ## 1.3.0
 
 - **Scan animation while syncing** — capturing your bookmarks now shows a live scanning overlay with a running count and a **Cancel** button, instead of visibly scrolling the page, so it's clear the sync is working. It uses your theme's accent color.
