@@ -167,13 +167,16 @@ export default class XBookmarksSync extends Plugin {
   }
 
   async openUrlInWebview(url: string) {
-    const existingLeaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
-    if (existingLeaves.length > 0) {
-      // View already open — navigate directly, no race possible
+    const view = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0]?.view;
+    if (view instanceof XBookmarksView) {
+      // View already instantiated — navigate its live webview directly.
       await this.activateView();
-      (existingLeaves[0].view as XBookmarksView).loadUrl(url);
+      view.loadUrl(url);
     } else {
-      // View not open — set pendingOpenUrl so onOpen() initializes to the right URL
+      // No leaf, or a deferred/hidden leaf not yet instantiated (its .view is Obsidian's
+      // DeferredView, not XBookmarksView) — seed pendingOpenUrl so onOpen() sets the
+      // webview's initial src to this URL whenever it fires (even if deferred past this
+      // await), avoiding a second navigation that races the default bookmarks load.
       this.pendingOpenUrl = url;
       await this.activateView();
     }
