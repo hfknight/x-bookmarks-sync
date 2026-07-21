@@ -60,4 +60,8 @@ export interface XBookmarksSyncData {
   // this. False after any run that stopped without seeing the end, forcing one full scan to
   // re-establish the baseline. Internal bookkeeping; not exposed in the settings panel.
   coverageProven: boolean;
+  // Last value used by the selection modal's "First N" button. Remembered because working through
+  // a large backlog means repeating the same batch size many times. Internal; the modal input is
+  // the only place it's set, so there's no settings-panel entry to disagree with.
+  selectBatchSize: number;
 }

@@ -4,6 +4,31 @@
 }
 
 /* ── Bookmark Selection Modal ────────────────────────────────────────── */
+.bookmark-select-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* "First" + its count read as a single control — flush edges with the inner corners squared off,
+   so the pair is visually distinct from the standalone All / None buttons beside it. */
+.bookmark-select-first {
+  display: flex;
+  align-items: center;
+}
+
+.bookmark-select-first button {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.bookmark-select-batch {
+  width: 5em;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
 .bookmark-list-container {
   max-height: 400px;
   overflow-y: auto;

@@ -72,6 +72,7 @@ export default class XBookmarksSync extends Plugin {
     lastShownVersion: null,
     forceFullScanOnNextSync: false,
     coverageProven: false,
+    selectBatchSize: 100,
   };
   pendingOpenUrl: string | null = null;
 
@@ -88,6 +89,7 @@ export default class XBookmarksSync extends Plugin {
       // Absent for users upgrading from <=1.3.1: default false so the next sync does one full scan
       // to establish a proven baseline, rather than trusting a waterline that was never verified.
       coverageProven: data?.coverageProven ?? false,
+      selectBatchSize: data?.selectBatchSize ?? 100,
     };
     this.importedIds = new Set(this.settings.importedIds);
     await this.maybeShowWhatsNew();

@@ -1699,11 +1699,17 @@ export class XBookmarksView extends ItemView {
       this.plugin,
       newBookmarks
     );
-    // Reset to incremental mode only after the user actually confirms import,
-    // not on extraction completion — avoids flipping the checkbox if the modal is cancelled.
-    modal.onImportComplete = () => {
-      this.incrementalMode = true;
-      if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = true;
+    // Reset to incremental mode only after the user actually confirms import, not on extraction
+    // completion — avoids flipping the checkbox if the modal is cancelled.
+    //
+    // And only when the whole offered list was taken. Importing a subset (the batching workflow:
+    // "First 100", import, repeat) leaves unimported bookmarks below the newly-imported prefix,
+    // which is exactly what the waterline would stop at and hide. Mirroring that state into the
+    // checkbox keeps the next Extract a full scan without the user having to know why — and the
+    // unchecked box is a visible, one-click-reversible readout of "there's known backlog below".
+    modal.onImportComplete = (importedAll: boolean) => {
+      this.incrementalMode = importedAll;
+      if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = importedAll;
     };
     modal.onDidClose = () => { this.updateToolbar(); };
     modal.open();
