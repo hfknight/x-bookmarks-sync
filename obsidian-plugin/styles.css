@@ -25,18 +25,8 @@
   margin-right: 10px;
 }
 
-.bookmark-item--imported {
-  opacity: 0.5;
-}
-
 .bookmark-item-text {
   font-size: 0.9em;
-}
-
-.bookmark-item-badge {
-  color: var(--text-error);
-  font-size: 0.85em;
-  font-weight: bold;
 }
 
 .bookmark-modal-btn-container {

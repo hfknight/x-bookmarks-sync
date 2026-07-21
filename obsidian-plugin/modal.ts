@@ -41,29 +41,25 @@ export class BookmarkSelectionModal extends Modal {
     });
     importBtn.disabled = true;
 
+    // Disabled at zero: an enabled CTA that can only tell you it has nothing to do is a dead end.
+    // Covers both the empty result and the user unchecking everything.
+    const syncImportBtn = () => {
+      importBtn.innerText = `Import selected (${this.selectedIds.size})`;
+      importBtn.disabled = this.selectedIds.size === 0;
+    };
+
     // Defer item rendering until after the first paint so the placeholder is
     // actually visible. Double rAF: first callback runs before the next paint,
     // second runs before the paint AFTER that — guaranteeing one paint cycle
     // happened with the placeholder on screen before the synchronous forEach
     // blocks the main thread.
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-      let newCount = 0;
       this.bookmarks.forEach((bookmark) => {
-        const isImported = this.plugin.isTweetImported(bookmark);
-
         const itemDiv = listContainer.createDiv({ cls: 'bookmark-item' });
 
         const checkbox = itemDiv.createEl('input', { type: 'checkbox', cls: 'bookmark-item-checkbox' });
-
-        if (isImported) {
-          checkbox.disabled = true;
-          checkbox.checked = false;
-          itemDiv.addClass('bookmark-item--imported');
-        } else {
-          checkbox.checked = true;
-          this.selectedIds.add(bookmark.id);
-          newCount++;
-        }
+        checkbox.checked = true;
+        this.selectedIds.add(bookmark.id);
 
         checkbox.onchange = (e) => {
           if ((e.target as HTMLInputElement).checked) {
@@ -71,7 +67,7 @@ export class BookmarkSelectionModal extends Modal {
           } else {
             this.selectedIds.delete(bookmark.id);
           }
-          importBtn.innerText = `Import selected (${this.selectedIds.size})`;
+          syncImportBtn();
         };
 
         const textDiv = itemDiv.createDiv({ cls: 'bookmark-item-text' });
@@ -83,11 +79,6 @@ export class BookmarkSelectionModal extends Modal {
         });
         textDiv.createEl('br');
         textDiv.createSpan({ text: title, cls: 'text-muted' });
-
-        if (isImported) {
-          textDiv.createEl('br');
-          textDiv.createSpan({ text: 'Already imported', cls: 'bookmark-item-badge' });
-        }
       });
 
       // Nothing new to show: reuse the placeholder as the empty state rather than leaving a blank
@@ -98,8 +89,7 @@ export class BookmarkSelectionModal extends Modal {
       } else {
         placeholder.remove();
       }
-      importBtn.innerText = `Import selected (${newCount})`;
-      importBtn.disabled = false;
+      syncImportBtn();
     }));
 
     importBtn.onclick = async () => {
