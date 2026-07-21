@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2
+
+- **Bookmarks missed by an earlier sync are now found** — if a sync ever stopped short of the end of your list, "Sync from last" would keep stopping at that same point and report "no new bookmarks", quietly hiding everything below it. Syncs now confirm they actually reached the end of your bookmark list, and fall back to a full scan whenever they can't. **Your first sync after this update will be a full scan** — that's deliberate, and it's what recovers anything an earlier sync left behind.
+- **Import a large backlog in batches** — the selection list now has **All**, **None**, and **First N** buttons. Set a number, import that batch, then click **Extract bookmarks** again for the next one; "Sync from last" stays off until you've worked through everything, then re-enables itself.
+- **A shorter selection list, and quicker syncs** — bookmarks already in your vault are no longer listed in the import dialog, and no longer re-processed during a sync.
+- **Import button is disabled when nothing is selected** — instead of being clickable and then telling you there was nothing to import.
+
 ## 1.3.1
 
 - **"Open in Obsidian Webview" links now land on the right tweet** — clicking a note's Obsidian Webview link (or any `obsidian://x-bookmarks` link) while the X bookmarks panel was open but hidden in the sidebar could open your bookmarks list instead of the tweet. It now navigates straight to the tweet.
