@@ -770,7 +770,12 @@ export class XBookmarksView extends ItemView {
     } catch { /* webview gone — fall through; candidates may still be empty */ }
 
     const candidates = Array.from(this.collectedBookmarks.values()).filter(
+      // Already-imported bookmarks are excluded before the MAX_RECOVER budget is applied: their
+      // notes are never rewritten (saveBookmarksToVault skips them), and because pages are walked
+      // newest-first the imported prefix sits at the front of this list — left in, it can consume
+      // the entire budget and leave a genuinely new long tweet stuck with X's truncated preview.
       (t) => t.truncated && !safeIds.has(t.id) && /\/status\/\d+/.test(t.url || '')
+        && !this.plugin.isTweetImported(t)
     );
     if (candidates.length === 0) return;
 
@@ -871,7 +876,9 @@ export class XBookmarksView extends ItemView {
    */
   private async recoverVideoPosters(): Promise<void> {
     const candidates = Array.from(this.collectedBookmarks.values()).filter(
+      // Skip already-imported bookmarks — their notes are never rewritten, so the fetch is discarded.
       (t) => t.hasVideo && (t.videoPosters?.length ?? 0) === 0 && /^\d+$/.test(t.id)
+        && !this.plugin.isTweetImported(t)
     );
     if (candidates.length === 0) return;
 
@@ -930,7 +937,9 @@ export class XBookmarksView extends ItemView {
    */
   private async recoverQuotedTweets(): Promise<void> {
     const candidates = Array.from(this.collectedBookmarks.values()).filter(
+      // Skip already-imported bookmarks — their notes are never rewritten, so the fetch is discarded.
       (t) => t.hasQuote && !t.quoted && /^\d+$/.test(t.id)
+        && !this.plugin.isTweetImported(t)
     );
     if (candidates.length === 0) return;
 
@@ -1671,7 +1680,13 @@ export class XBookmarksView extends ItemView {
       return;
     }
 
-    const count = this.collectedBookmarks.size;
+    // Only the bookmarks that can actually be imported reach the modal. Already-imported ones were
+    // rendered as disabled rows (~8 DOM elements each), which on a large re-scan is most of the
+    // list and most of the modal's build time — for rows that exist only to be greyed out.
+    const newBookmarks = Array.from(this.collectedBookmarks.values())
+      .filter(t => !this.plugin.isTweetImported(t));
+
+    const count = newBookmarks.length;
     if (this.hintSpan) {
       this.hintSpan.setText(`Preparing ${count} bookmark${count !== 1 ? 's' : ''}…`);
     }
@@ -1682,7 +1697,7 @@ export class XBookmarksView extends ItemView {
     const modal = new BookmarkSelectionModal(
       this.app,
       this.plugin,
-      Array.from(this.collectedBookmarks.values())
+      newBookmarks
     );
     // Reset to incremental mode only after the user actually confirms import,
     // not on extraction completion — avoids flipping the checkbox if the modal is cancelled.

@@ -9,6 +9,7 @@ export class BookmarkSelectionModal extends Modal {
   onImportComplete?: () => void;
   onDidClose?: () => void;
 
+  // Receives only importable bookmarks — already-imported ones are filtered out by the caller.
   constructor(app: App, plugin: XBookmarksSync, bookmarks: Tweet[]) {
     super(app);
     this.plugin = plugin;
@@ -89,7 +90,14 @@ export class BookmarkSelectionModal extends Modal {
         }
       });
 
-      placeholder.remove();
+      // Nothing new to show: reuse the placeholder as the empty state rather than leaving a blank
+      // list. No counts here — the number scanned is a pagination artifact (one page on an
+      // incremental sync, the whole list on a full scan) and says nothing useful about the vault.
+      if (this.bookmarks.length === 0) {
+        placeholder.setText('No new bookmarks — everything scanned is already imported.');
+      } else {
+        placeholder.remove();
+      }
       importBtn.innerText = `Import selected (${newCount})`;
       importBtn.disabled = false;
     }));
