@@ -647,7 +647,7 @@ export class XBookmarksView extends ItemView {
     }
     if (phase === 'cancelled') return 'cancelled';
     if (phase === 'timeout') {
-      console.log('[x-bookmarks] no Bookmarks request template captured — using scroll capture.');
+      console.warn('[x-bookmarks] no Bookmarks request template captured — using scroll capture.');
       return 'fallback';
     }
 
@@ -666,7 +666,12 @@ export class XBookmarksView extends ItemView {
 
     if (result.stoppedReason === 'incremental-waterline') this.stoppedAtWaterline = true;
     for (const tweet of result.tweets) this.mergeBookmark(tweet);
-    console.log(`[x-bookmarks] API capture: ${result.tweets.length} bookmarks · ${result.pages} pages · stop ${result.stoppedReason}${result.hit429 ? ' · hit 429' : ''}`);
+    // Only rate limiting is worth reporting — a clean capture needs no narration, and its counts
+    // are already on screen. A 429 means X throttled us mid-walk, which is the condition most
+    // likely to precede a degraded or partial sync.
+    if (result.hit429) {
+      console.warn(`[x-bookmarks] API capture hit rate limiting — ${result.tweets.length} bookmarks over ${result.pages} pages, stop ${result.stoppedReason}.`);
+    }
     return 'captured';
   }
 
@@ -1657,16 +1662,18 @@ export class XBookmarksView extends ItemView {
     //   otherwise             → unproven: the run ended without reaching the end (scroll stall, a
     //                           repeated cursor, an error) and may have left a gap. Force a full scan.
     // Cancelled runs return earlier and leave the flag untouched — a cancel proves nothing either way.
-    const previouslyProven = this.plugin.settings.coverageProven;
     if (reachedEnd) {
       this.plugin.settings.coverageProven = true;
     } else if (!this.stoppedAtWaterline) {
       this.plugin.settings.coverageProven = false;
     }
-    // Logged every run, not just on change: a capture that can never prove coverage (e.g. a full
-    // walk that keeps ending on a repeated cursor) is stuck doing full scans forever, and that
-    // stays silent if we only report transitions.
-    console.log(`[x-bookmarks] coverageProven ${previouslyProven} → ${this.plugin.settings.coverageProven} (reachedEnd=${reachedEnd}, stoppedAtWaterline=${this.stoppedAtWaterline})`);
+    // Reported only when coverage is unproven — the actionable case. A capture that can never
+    // confirm the end of the list (e.g. a full walk that keeps ending on a repeated cursor) is
+    // stuck doing a full scan every sync, and would otherwise be indistinguishable from a slow
+    // account. A proven run needs no narration.
+    if (!this.plugin.settings.coverageProven) {
+      console.warn(`[x-bookmarks] end of bookmark list not confirmed (reachedEnd=${reachedEnd}, stoppedAtWaterline=${this.stoppedAtWaterline}) — the next sync will run a full scan.`);
+    }
 
     // Consume the one-shot full-scan flag now that capture reached the end.
     // Cancel/navigate-away paths return early and leave the flag set so the next attempt retries.
