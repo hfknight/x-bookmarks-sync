@@ -28,9 +28,12 @@ This is an Obsidian plugin that syncs X (Twitter) bookmarks to an Obsidian vault
 npm run build:plugin   # type-check + esbuild + copy to root & dist-plugin
 npm run build          # above + vite build for the web app
 npm run deploy:local   # build:plugin + copy main.js & manifest.json to local Obsidian vault
+npm run deploy:icloud  # same, but to the iCloud vault
 ```
 
-Local vault plugin path: `/Users/fei.hu/Dropbox/Obsidian Notes/.obsidian/plugins/x-bookmarks-sync/`
+Local vault plugin paths (deploy targets are separate — neither script writes to both):
+- `deploy:local` → `/Users/fei.hu/Dropbox/Obsidian Notes/.obsidian/plugins/x-bookmarks-sync/`
+- `deploy:icloud` → `/Users/fei.hu/Library/Mobile Documents/iCloud~md~obsidian/Documents/ob-vault-icloud/.obsidian/plugins/x-bookmarks-sync/`
 
 Build outputs (`main.js`) are gitignored — distributed via GitHub Releases.
 
