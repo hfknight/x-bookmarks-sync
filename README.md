@@ -9,10 +9,10 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 ## Features
 
 - **No API key required** — runs in an embedded webview using your existing X session; no OAuth, no tokens to manage
-- **Complete, reliable capture** — reads your bookmark list directly instead of scrolling the page, so large libraries sync quickly and nothing is missed
+- **Verified capture** — reads your bookmark list directly instead of scrolling the page, so large libraries sync quickly. Each sync confirms it actually reached the end of your bookmark list; when it can't, the next one re-scans in full rather than assuming
 - **Import X article body** — for native X long-form articles, pull the full article text into the note and rename it to the article's title (right-click, command palette, or toolbar button)
 - **Incremental sync** — "Sync from last" stops as soon as it reaches already-imported bookmarks, for quick top-ups
-- **Selective import** — choose exactly which bookmarks to save from a checklist; already-imported ones are grayed out and skipped
+- **Selective import** — choose exactly which bookmarks to save from a checklist, with **All / None / First N** controls for working through a large backlog in batches; bookmarks already in your vault are filtered out
 - **Rich content** — full long-form text, images, and video/GIF thumbnails; quoted tweets are folded inline under a **Quoted tweet** heading
 - **Structured Markdown notes** — YAML frontmatter, configurable folder / tags / filename format, and an `obsidian://` deep-link back to the tweet
 - **Re-import on next sync** — refresh a single note with one click to pick up newer fields
@@ -30,8 +30,8 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 2. A side panel opens with X.com loaded. Log in to your account if prompted.
 3. Navigate to your **Bookmarks page**.
 4. Click **Extract bookmarks** in the panel toolbar. A scan overlay appears while the plugin reads your bookmarks directly — no scrolling, and you can **Cancel** anytime.
-5. A selection modal appears listing all visible bookmarks. New ones are pre-checked; already-imported ones are grayed out.
-6. Check or uncheck as needed, then click **Import Selected**.
+5. A selection modal appears listing the bookmarks that aren't in your vault yet, all pre-checked. Anything already imported is filtered out rather than listed.
+6. Adjust the selection — row by row, or with the **All** / **None** / **First N** buttons — then click **Import Selected**.
 7. Notes appear in your configured bookmarks folder (default: `x-bookmarks/`).
 
 ### Sync from last (incremental mode)
@@ -39,6 +39,12 @@ Sync your X (Twitter) bookmarks directly into your Obsidian vault as clean, stru
 Check **Sync from last** in the toolbar before clicking **Extract bookmarks**. The plugin stops as soon as it reaches bookmarks you've already imported — ideal for regular top-up syncs without re-reading your entire history.
 
 > **First sync:** The checkbox is unchecked by default until you have completed at least one full sync. This ensures your entire bookmark history is captured on the first run.
+
+> **Automatic full scans:** The shortcut is only safe if an earlier scan actually reached the end of your bookmark list — otherwise it would stop at a gap and hide everything below it. So the checkbox also clears itself, and the next scan is a full one, whenever that can't be confirmed: after a scan that ended without reaching the end of the list, or after you import only part of what was offered. Re-check it any time to go back to fast top-ups.
+
+### Importing a large backlog in batches
+
+If a first sync turns up more bookmarks than you want to file at once, use **First N** in the selection modal — set the number, import that batch, then click **Extract bookmarks** again for the next one. The plugin keeps "Sync from last" unchecked while bookmarks remain unimported, so each round picks up where the last left off. Once you import everything offered, it re-checks itself and normal fast syncing resumes.
 
 ### Import X article body
 
