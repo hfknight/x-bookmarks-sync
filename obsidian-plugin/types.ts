@@ -54,4 +54,10 @@ export interface XBookmarksSyncData {
   lastSyncAt: string | null;
   lastShownVersion: string | null;
   forceFullScanOnNextSync: boolean;
+  // Did the last capture prove it reached the end of the bookmarks list (X returned a page with
+  // zero tweet entries)? The "Sync from last" waterline stops at the first fully-imported page,
+  // which is only sound if everything below it was actually scanned — so the shortcut is gated on
+  // this. False after any run that stopped without seeing the end, forcing one full scan to
+  // re-establish the baseline. Internal bookkeeping; not exposed in the settings panel.
+  coverageProven: boolean;
 }

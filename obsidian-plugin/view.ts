@@ -46,6 +46,13 @@ export class XBookmarksView extends ItemView {
   cancelRequested: boolean = false;
   collectedBookmarks: Map<string, Tweet> = new Map();
   incrementalMode: boolean = true;
+  // Run-scoped: did this capture stop early at the incremental waterline (rather than by reaching
+  // the end of the list)? Such a run proves nothing new about coverage, but doesn't disprove the
+  // previous run's proof either — finalizeCapture uses it to leave coverageProven untouched.
+  stoppedAtWaterline: boolean = false;
+  // Run-scoped: this run overrode the user's "Sync from last" choice, so the scan surface explains
+  // why rather than showing the ordinary scanning label.
+  showFullScanLabel: boolean = false;
   syncFromLastLabel: HTMLElement | null = null;
   syncFromLastCheckbox: HTMLInputElement | null = null;
 
@@ -316,6 +323,49 @@ export class XBookmarksView extends ItemView {
             } catch (e) {}
           }
 
+          // End-of-list detector. X's Bookmarks timeline exposes no total count and emits no
+          // TimelineTerminateTimeline instruction; it also returns a Bottom cursor on *every*
+          // response, including past the end — so cursor absence proves nothing. The one real
+          // signal is a TimelineAddEntries carrying cursors but zero TimelineTimelineItem entries:
+          // X saying "no more bookmarks". Verified on both capture paths (the passive interceptor
+          // sees it during scroll capture, the pagination loop sees it on its own fetches).
+          //
+          // Latched, never cleared here — the host resets it at the start of each capture run and
+          // reads it in finalizeCapture to decide whether coverage was proven.
+          //
+          // Known assumption: a page served empty *transiently* (e.g. X throttling mid-list) would
+          // falsely latch this. Judged acceptable — the API walk already treats its equivalents
+          // ('no-new'/'cursor-repeat') as clean stops, so this is strictly better than before.
+          function __xbsDetectEndOfList(data) {
+            try {
+              var root = data && data.data;
+              if (!root) return;
+              var tlKey = null;
+              for (var rk in root) {
+                if (Object.prototype.hasOwnProperty.call(root, rk) && /bookmark/i.test(rk)) { tlKey = rk; break; }
+              }
+              if (!tlKey) return; // not a Bookmarks response
+              var tl = (root[tlKey] && root[tlKey].timeline) || root[tlKey];
+              if (!tl || typeof tl !== 'object') return;
+
+              var ins = tl.instructions || [];
+              var sawAddEntries = false;
+              var itemCount = 0;
+              for (var i = 0; i < ins.length; i++) {
+                var it = ins[i] || {};
+                if (it.type !== 'TimelineAddEntries') continue;
+                sawAddEntries = true;
+                var ents = it.entries || [];
+                for (var j = 0; j < ents.length; j++) {
+                  var c = (ents[j] || {}).content || {};
+                  if ((c.entryType || c.itemType) === 'TimelineTimelineItem') itemCount++;
+                }
+              }
+              if (sawAddEntries && itemCount === 0) window.__xbsSawEndOfList = true;
+            } catch (e) {}
+          }
+          window.__xbsDetectEndOfList = __xbsDetectEndOfList;
+
           // XHR interceptor
           var __xbsOrigOpen = XMLHttpRequest.prototype.open;
           XMLHttpRequest.prototype.open = function(method, url) {
@@ -349,6 +399,7 @@ export class XBookmarksView extends ItemView {
                   }
                   if (data) {
                     var before = Object.keys(window.__xbsApiCollected).length;
+                    __xbsDetectEndOfList(data);
                     __xbsFindTweets(data, 0);
                     if (Object.keys(window.__xbsApiCollected).length > before) window.__newTweetsAppeared = true;
                   }
@@ -373,6 +424,7 @@ export class XBookmarksView extends ItemView {
                 clone.text().then(function(text) {
                   try {
                     var data = JSON.parse(text);
+                    __xbsDetectEndOfList(data);
                     __xbsFindTweets(data, 0);
                     window.__newTweetsAppeared = true;
                   } catch(e) {}
@@ -444,6 +496,8 @@ export class XBookmarksView extends ItemView {
             var status = resp.status;
             if (status !== 200) return JSON.stringify({ status: status });
             var data = await resp.json();
+            // Load-bearing for the API path: this is the site guaranteed to see the walk's own pages.
+            if (window.__xbsDetectEndOfList) window.__xbsDetectEndOfList(data);
             if (window.__xbsFindTweets) window.__xbsFindTweets(data, 0);
             var afterKeys = Object.keys(window.__xbsApiCollected || {});
             // Ids new to this page (no cross-page overlap, so these are the page's tweet ids) —
@@ -610,15 +664,31 @@ export class XBookmarksView extends ItemView {
       return 'fallback';
     }
 
+    if (result.stoppedReason === 'incremental-waterline') this.stoppedAtWaterline = true;
     for (const tweet of result.tweets) this.mergeBookmark(tweet);
     console.log(`[x-bookmarks] API capture: ${result.tweets.length} bookmarks · ${result.pages} pages · stop ${result.stoppedReason}${result.hit429 ? ' · hit 429' : ''}`);
     return 'captured';
   }
 
+  // Read the interceptor's end-of-list latch: did any Bookmarks response this run come back with
+  // zero tweet entries (X's only "that's everything" signal)? Reset at the start of each run.
+  private async sawEndOfList(): Promise<boolean> {
+    if (!this.webview) return false;
+    try {
+      return await this.webview.executeJavaScript(
+        '(function(){ try { return !!window.__xbsSawEndOfList; } catch(e){ return false; } })()'
+      ) as boolean;
+    } catch {
+      return false; // webview gone — can't prove coverage
+    }
+  }
+
   // Reveal the scan surface and hide the live page (kept functional at opacity:0). Called when a
   // capture starts.
   private showScanOverlay() {
-    if (this.scanLabel) this.scanLabel.setText('Scanning bookmarks…');
+    if (this.scanLabel) {
+      this.scanLabel.setText(this.showFullScanLabel ? 'Full scan — checking for missed bookmarks…' : 'Scanning bookmarks…');
+    }
     this.scanOverlay?.removeClass('is-hidden');
     this.webview?.addClass('is-dimmed');
   }
@@ -1101,7 +1171,13 @@ export class XBookmarksView extends ItemView {
     this.extractBtn.innerText = 'Cancel';
     this.extractBtn.onclick = () => { this.cancelRequested = true; };
     if (this.syncFromLastLabel) this.syncFromLastLabel.toggleClass('is-hidden', true);
-    if (this.scanLabel) this.scanLabel.setText(count > 0 ? `Scanning bookmarks… ${count} found` : 'Scanning bookmarks…');
+    // When we overrode the user's "Sync from last" choice, say so for the whole run. The Notice
+    // explaining it expires in seconds while the scan takes minutes, so by the time the user
+    // wonders why this is slow, this label is the only thing still on screen.
+    if (this.scanLabel) {
+      const prefix = this.showFullScanLabel ? 'Full scan — checking for missed bookmarks…' : 'Scanning bookmarks…';
+      this.scanLabel.setText(count > 0 ? `${prefix} ${count} found` : prefix);
+    }
   }
 
   private async pollFlag(): Promise<boolean> {
@@ -1142,16 +1218,25 @@ export class XBookmarksView extends ItemView {
       this.isScrolling = true;
       this.cancelRequested = false;
       this.collectedBookmarks = new Map();
+      this.stoppedAtWaterline = false;
+      this.showFullScanLabel = false;
       let noNewCount = 0;
       let iterationCount = 0;
       // A re-imported bookmark may sit deep in the timeline past the incremental
       // waterline, so a one-shot flag forces a full scan to guarantee we reach it.
       const fullScanOverride = this.plugin.settings.forceFullScanOnNextSync;
-      const incrementalMode = this.incrementalMode && !fullScanOverride;
-      const overrideActiveThisRun = fullScanOverride && this.incrementalMode;
+      // The waterline is only sound if the previous run provably reached the end of the list —
+      // otherwise it stops at a gap left by an incomplete scan and hides everything below it,
+      // permanently. Unproven coverage downgrades this run to a full scan to rebuild the baseline.
+      const coverageProven = this.plugin.settings.coverageProven;
+      const incrementalMode = this.incrementalMode && !fullScanOverride && coverageProven;
+      const overrideActiveThisRun = (fullScanOverride || !coverageProven) && this.incrementalMode;
+      this.showFullScanLabel = overrideActiveThisRun;
       if (overrideActiveThisRun) {
         if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = false;
-        new Notice('Re-imported bookmark detected — running a full scan to find it.');
+        new Notice(fullScanOverride
+          ? 'Re-imported bookmark detected — running a full scan to find it.'
+          : 'One-time full scan: checking that earlier syncs didn\'t miss anything. Later syncs will be quick again.');
       }
 
       this.setScrollingToolbar(0);
@@ -1164,6 +1249,12 @@ export class XBookmarksView extends ItemView {
       // a plain src= set is a no-op in that case, so a re-sync kept the stale feed.
       void this.webview.loadURL('https://x.com/i/bookmarks').catch(() => {});
       await new Promise(resolve => window.setTimeout(resolve, 1500));
+
+      // Clear the end-of-list latch for this run. The navigation above already wipes webview
+      // globals, but reset explicitly so the flag can never carry over from a previous capture.
+      try {
+        await this.webview.executeJavaScript('window.__xbsSawEndOfList = false;');
+      } catch { /* webview mid-navigation — the latch starts false anyway */ }
 
       // Primary: deterministic cursor pagination. On 'captured' we skip straight to the shared
       // finalize tail; on 'fallback' we flow into today's scroll path below (worst case = current
@@ -1457,6 +1548,7 @@ export class XBookmarksView extends ItemView {
             allImportedCount = 0;
           }
           if (allImportedCount >= 3) {
+            this.stoppedAtWaterline = true;
             break; // waterline reached — stop scrolling
           }
         }
@@ -1474,6 +1566,11 @@ export class XBookmarksView extends ItemView {
         if (noNewCount > 0 && this.hintSpan) {
           this.hintSpan.setText(`Finalizing — ${this.collectedBookmarks.size} found`);
         }
+
+        // X served a page with zero tweet entries — it has no more bookmarks. Stop now instead of
+        // burning the remaining no-new iterations (~3.5s each) waiting for a timeout it already
+        // answered. Coverage is also proven by this, which finalizeCapture records.
+        if (await this.sawEndOfList()) break;
 
         if (noNewCount >= 5 || iterationCount >= 500) {
           break;
@@ -1516,6 +1613,8 @@ export class XBookmarksView extends ItemView {
   // the locals in autoScrollAndExtract so the "Sync from last" checkbox and one-shot full-scan flag
   // resolve identically regardless of which path captured the bookmarks.
   private async finalizeCapture(overrideActiveThisRun: boolean, fullScanOverride: boolean): Promise<void> {
+    // Read the end-of-list latch before cleanup, while the webview is certainly still alive.
+    const reachedEnd = await this.sawEndOfList();
     await this.cleanup();
     // Recover any bookmarks whose full body the API interceptor missed (X served only the
     // truncated "Show more" preview). Detected structurally via tweet-text-show-more-link.
@@ -1542,12 +1641,30 @@ export class XBookmarksView extends ItemView {
     if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
     this.updateToolbar();
 
+    // Record whether the waterline shortcut is safe for the next sync. Three cases:
+    //   reachedEnd            → proven: X served a zero-entry page, so nothing lies below.
+    //   stoppedAtWaterline    → unchanged: the run stopped early on purpose and proves nothing new,
+    //                           but the previous run's proof still holds (X only appends at the top).
+    //   otherwise             → unproven: the run ended without reaching the end (scroll stall, a
+    //                           repeated cursor, an error) and may have left a gap. Force a full scan.
+    // Cancelled runs return earlier and leave the flag untouched — a cancel proves nothing either way.
+    const previouslyProven = this.plugin.settings.coverageProven;
+    if (reachedEnd) {
+      this.plugin.settings.coverageProven = true;
+    } else if (!this.stoppedAtWaterline) {
+      this.plugin.settings.coverageProven = false;
+    }
+    // Logged every run, not just on change: a capture that can never prove coverage (e.g. a full
+    // walk that keeps ending on a repeated cursor) is stuck doing full scans forever, and that
+    // stays silent if we only report transitions.
+    console.log(`[x-bookmarks] coverageProven ${previouslyProven} → ${this.plugin.settings.coverageProven} (reachedEnd=${reachedEnd}, stoppedAtWaterline=${this.stoppedAtWaterline})`);
+
     // Consume the one-shot full-scan flag now that capture reached the end.
     // Cancel/navigate-away paths return early and leave the flag set so the next attempt retries.
     if (fullScanOverride) {
       this.plugin.settings.forceFullScanOnNextSync = false;
-      await this.plugin.saveSettings();
     }
+    await this.plugin.saveSettings();
 
     if (this.collectedBookmarks.size === 0) {
       new Notice('No bookmarks found.');
