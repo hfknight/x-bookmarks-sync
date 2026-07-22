@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3
+
+- **Bookmarks are listed in the order you saved them** — the import list could show older bookmarks first. That also meant **First N** picked an arbitrary N rather than the newest N, so working through a backlog in batches could revisit some bookmarks and skip others. The list now follows X's own bookmark order.
+
 ## 1.3.2
 
 - **Bookmarks missed by an earlier sync are now found** — if a sync ever stopped short of the end of your list, "Sync from last" would keep stopping at that same point and report "no new bookmarks", quietly hiding everything below it. Syncs now confirm they actually reached the end of your bookmark list, and fall back to a full scan whenever they can't. **Your first sync after this update will be a full scan** — that's deliberate, and it's what recovers anything an earlier sync left behind.
