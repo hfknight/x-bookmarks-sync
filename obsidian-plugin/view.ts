@@ -394,15 +394,19 @@ export class XBookmarksView extends ItemView {
             return null;
           }
 
+          // Returns the tweet ids carried by this response, in list order, as a side benefit of the
+          // walk it already does. The pagination loop uses that instead of diffing the collected
+          // map — see getPaginationScript.
           function __xbsRecordOrder(data) {
+            var pageIds = [];
             try {
               var root = data && data.data;
-              if (!root) return;
+              if (!root) return pageIds;
               var tlKey = null;
               for (var rk in root) {
                 if (Object.prototype.hasOwnProperty.call(root, rk) && /bookmark/i.test(rk)) { tlKey = rk; break; }
               }
-              if (!tlKey) return;
+              if (!tlKey) return pageIds;
               var tl = (root[tlKey] && root[tlKey].timeline) || root[tlKey];
               var ins = (tl && tl.instructions) || [];
               window.__xbsOrder = window.__xbsOrder || {};
@@ -417,10 +421,14 @@ export class XBookmarksView extends ItemView {
                   // convention ever changes.
                   var m = /(\\d{10,})/.exec(String(e.entryId || ''));
                   var id = m ? m[1] : __xbsFirstTweetId(c, 0);
-                  if (id) window.__xbsOrder[id] = String(e.sortIndex);
+                  if (id) {
+                    window.__xbsOrder[id] = String(e.sortIndex);
+                    pageIds.push(id);
+                  }
                 }
               }
             } catch (e) {}
+            return pageIds;
           }
           window.__xbsRecordOrder = __xbsRecordOrder;
 
@@ -549,23 +557,31 @@ export class XBookmarksView extends ItemView {
             if (ct0) headers['x-csrf-token'] = decodeURIComponent(ct0);
             if (!headers['authorization']) headers['authorization'] = 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
 
-            var beforeKeys = Object.keys(window.__xbsApiCollected || {});
-            var beforeSet = {};
-            for (var bi = 0; bi < beforeKeys.length; bi++) beforeSet[beforeKeys[bi]] = 1;
             var resp = await fetch(u.toString(), { method: 'GET', headers: headers, credentials: 'include' });
             var status = resp.status;
             if (status !== 200) return JSON.stringify({ status: status });
             var data = await resp.json();
             // Load-bearing for the API path: this is the site guaranteed to see the walk's own pages.
             if (window.__xbsDetectEndOfList) window.__xbsDetectEndOfList(data);
-            if (window.__xbsRecordOrder) window.__xbsRecordOrder(data);
+            // Ids come from this response, not from diffing __xbsApiCollected. That map is written
+            // by the XHR and fetch hooks and by X's own page activity too, so a bookmark already
+            // inserted by one of them would look "not new" here — and a page whose bookmarks all
+            // arrived that way would report zero, stopping the walk early on what reads as a clean
+            // finish. Reading the response directly is both the correct meaning ("what is on this
+            // page", which is what the waterline asks) and immune to whoever else wrote to the map.
+            var pageIds = (window.__xbsRecordOrder && window.__xbsRecordOrder(data)) || [];
             if (window.__xbsFindTweets) window.__xbsFindTweets(data, 0);
             var afterKeys = Object.keys(window.__xbsApiCollected || {});
-            // Ids new to this page (no cross-page overlap, so these are the page's tweet ids) —
-            // used by the caller for the incremental "Sync from last" waterline stop.
-            var addedIds = afterKeys.filter(function(k) { return !beforeSet[k]; });
+
+            // Separately, guard against X handing back a page we have already walked. Tracked
+            // per-walk rather than against the shared map, for the same reason.
+            window.__xbsWalkSeen = window.__xbsWalkSeen || {};
+            var freshCount = 0;
+            for (var pi = 0; pi < pageIds.length; pi++) {
+              if (!window.__xbsWalkSeen[pageIds[pi]]) { window.__xbsWalkSeen[pageIds[pi]] = 1; freshCount++; }
+            }
             var bottom = __xbsFindBottomCursor(data, 0);
-            return JSON.stringify({ status: status, cursor: bottom || null, newCount: addedIds.length, total: afterKeys.length, ids: addedIds });
+            return JSON.stringify({ status: status, cursor: bottom || null, newCount: freshCount, total: afterKeys.length, ids: pageIds });
           } catch (e) {
             return JSON.stringify({ error: String((e && e.message) || e) });
           }
@@ -590,7 +606,7 @@ export class XBookmarksView extends ItemView {
 
     await this.webview.executeJavaScript(this.getPaginationScript());
     // Start from a clean collection so the count reflects only what pagination retrieved.
-    await this.webview.executeJavaScript('window.__xbsApiCollected = {};');
+    await this.webview.executeJavaScript('window.__xbsApiCollected = {}; window.__xbsWalkSeen = {};');
 
     let cursor: string | null = null;
     let pages = 0;
