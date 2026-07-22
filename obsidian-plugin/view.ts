@@ -366,6 +366,64 @@ export class XBookmarksView extends ItemView {
           }
           window.__xbsDetectEndOfList = __xbsDetectEndOfList;
 
+          // Record each bookmark's position in X's list, keyed by tweet id.
+          //
+          // Collection order cannot be trusted: __xbsApiCollected is written by three racing
+          // producers — the XHR hook, the fetch hook (which re-parses our own pagination responses
+          // on a later microtask), and the pagination walk itself — plus whatever X's page loads on
+          // its own. A nudge scroll makes it worse by jumping X to the bottom of the list, so deep
+          // (old) pages can land ahead of page 1. Sorting by this index restores true bookmark
+          // order regardless of who inserted when.
+          //
+          // sortIndex descends down the timeline, so descending sort = most recently bookmarked
+          // first. Note that is *bookmark* order, not post date: an old post bookmarked today
+          // belongs at the top.
+          function __xbsFirstTweetId(obj, depth) {
+            if (!obj || typeof obj !== 'object' || depth > 8) return null;
+            if (obj.core && obj.core.user_results && (obj.rest_id || (obj.legacy && obj.legacy.id_str))) {
+              return String((obj.legacy && obj.legacy.id_str) || obj.rest_id);
+            }
+            for (var k in obj) {
+              if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+              if (k === 'quoted_status_result') continue;
+              if (obj[k] && typeof obj[k] === 'object') {
+                var r = __xbsFirstTweetId(obj[k], depth + 1);
+                if (r) return r;
+              }
+            }
+            return null;
+          }
+
+          function __xbsRecordOrder(data) {
+            try {
+              var root = data && data.data;
+              if (!root) return;
+              var tlKey = null;
+              for (var rk in root) {
+                if (Object.prototype.hasOwnProperty.call(root, rk) && /bookmark/i.test(rk)) { tlKey = rk; break; }
+              }
+              if (!tlKey) return;
+              var tl = (root[tlKey] && root[tlKey].timeline) || root[tlKey];
+              var ins = (tl && tl.instructions) || [];
+              window.__xbsOrder = window.__xbsOrder || {};
+              for (var i = 0; i < ins.length; i++) {
+                var ents = (ins[i] && ins[i].entries) || [];
+                for (var j = 0; j < ents.length; j++) {
+                  var e = ents[j] || {};
+                  if (e.sortIndex === undefined || e.sortIndex === null) continue;
+                  var c = e.content || {};
+                  if (c.cursorType) continue; // cursor entries hold no bookmark
+                  // X names timeline entries "tweet-<id>"; fall back to walking the entry if that
+                  // convention ever changes.
+                  var m = /(\\d{10,})/.exec(String(e.entryId || ''));
+                  var id = m ? m[1] : __xbsFirstTweetId(c, 0);
+                  if (id) window.__xbsOrder[id] = String(e.sortIndex);
+                }
+              }
+            } catch (e) {}
+          }
+          window.__xbsRecordOrder = __xbsRecordOrder;
+
           // XHR interceptor
           var __xbsOrigOpen = XMLHttpRequest.prototype.open;
           XMLHttpRequest.prototype.open = function(method, url) {
@@ -400,6 +458,7 @@ export class XBookmarksView extends ItemView {
                   if (data) {
                     var before = Object.keys(window.__xbsApiCollected).length;
                     __xbsDetectEndOfList(data);
+                    __xbsRecordOrder(data);
                     __xbsFindTweets(data, 0);
                     if (Object.keys(window.__xbsApiCollected).length > before) window.__newTweetsAppeared = true;
                   }
@@ -425,6 +484,7 @@ export class XBookmarksView extends ItemView {
                   try {
                     var data = JSON.parse(text);
                     __xbsDetectEndOfList(data);
+                    __xbsRecordOrder(data);
                     __xbsFindTweets(data, 0);
                     window.__newTweetsAppeared = true;
                   } catch(e) {}
@@ -498,6 +558,7 @@ export class XBookmarksView extends ItemView {
             var data = await resp.json();
             // Load-bearing for the API path: this is the site guaranteed to see the walk's own pages.
             if (window.__xbsDetectEndOfList) window.__xbsDetectEndOfList(data);
+            if (window.__xbsRecordOrder) window.__xbsRecordOrder(data);
             if (window.__xbsFindTweets) window.__xbsFindTweets(data, 0);
             var afterKeys = Object.keys(window.__xbsApiCollected || {});
             // Ids new to this page (no cross-page overlap, so these are the page's tweet ids) —
@@ -686,6 +747,51 @@ export class XBookmarksView extends ItemView {
     } catch {
       return false; // webview gone — can't prove coverage
     }
+  }
+
+  // Read the per-bookmark position the interceptor recorded this run: tweet id → sortIndex.
+  private async readCaptureOrder(): Promise<Map<string, string>> {
+    if (!this.webview) return new Map();
+    try {
+      const raw = await this.webview.executeJavaScript(
+        '(function(){ try { return JSON.stringify(window.__xbsOrder || {}); } catch(e){ return "{}"; } })()'
+      ) as string;
+      return new Map(Object.entries(JSON.parse(raw || '{}') as Record<string, string>));
+    } catch {
+      return new Map(); // webview gone — leave collection order alone
+    }
+  }
+
+  /**
+   * Restore X's bookmark order (most recently bookmarked first) on a list whose collection order is
+   * a race between several producers. Sorts in place.
+   *
+   * sortIndex values are big decimal strings, so they're compared by length first and then
+   * lexicographically — same result as a bigint compare, without the conversion. Bookmarks with no
+   * recorded position (e.g. picked up by DOM extraction rather than a timeline response) sort last
+   * while keeping their relative order, since the sort is stable.
+   */
+  private sortByCaptureOrder(list: Tweet[], order: Map<string, string>): void {
+    if (order.size === 0) {
+      // Nothing was recorded, so the list keeps its (unreliable) collection order. Worth reporting:
+      // it means X stopped emitting sortIndex on timeline entries, and "First N" in the selection
+      // modal silently stops meaning "the newest N".
+      if (list.length > 0) {
+        console.warn('[x-bookmarks] no bookmark order recorded — the import list may not be in bookmark order.');
+      }
+      return;
+    }
+    list.sort((a, b) => {
+      const sa = order.get(a.id);
+      const sb = order.get(b.id);
+      if (sa && sb) {
+        if (sa.length !== sb.length) return sb.length - sa.length;
+        return sa < sb ? 1 : sa > sb ? -1 : 0;
+      }
+      if (sa) return -1;
+      if (sb) return 1;
+      return 0;
+    });
   }
 
   // Reveal the scan surface and hide the live page (kept functional at opacity:0). Called when a
@@ -1267,7 +1373,7 @@ export class XBookmarksView extends ItemView {
       // Clear the end-of-list latch for this run. The navigation above already wipes webview
       // globals, but reset explicitly so the flag can never carry over from a previous capture.
       try {
-        await this.webview.executeJavaScript('window.__xbsSawEndOfList = false;');
+        await this.webview.executeJavaScript('window.__xbsSawEndOfList = false; window.__xbsOrder = {};');
       } catch { /* webview mid-navigation — the latch starts false anyway */ }
 
       // Primary: deterministic cursor pagination. On 'captured' we skip straight to the shared
@@ -1627,8 +1733,10 @@ export class XBookmarksView extends ItemView {
   // the locals in autoScrollAndExtract so the "Sync from last" checkbox and one-shot full-scan flag
   // resolve identically regardless of which path captured the bookmarks.
   private async finalizeCapture(overrideActiveThisRun: boolean, fullScanOverride: boolean): Promise<void> {
-    // Read the end-of-list latch before cleanup, while the webview is certainly still alive.
+    // Read the end-of-list latch and the recorded bookmark order before cleanup, while the webview
+    // is certainly still alive.
     const reachedEnd = await this.sawEndOfList();
+    const captureOrder = await this.readCaptureOrder();
     await this.cleanup();
     // Recover any bookmarks whose full body the API interceptor missed (X served only the
     // truncated "Show more" preview). Detected structurally via tweet-text-show-more-link.
@@ -1692,6 +1800,10 @@ export class XBookmarksView extends ItemView {
     // list and most of the modal's build time — for rows that exist only to be greyed out.
     const newBookmarks = Array.from(this.collectedBookmarks.values())
       .filter(t => !this.plugin.isTweetImported(t));
+    // Present them in X's own bookmark order. Collection order is not that order — see
+    // sortByCaptureOrder — and the modal's "First N" is only meaningful if this list is
+    // most-recently-bookmarked first.
+    this.sortByCaptureOrder(newBookmarks, captureOrder);
 
     const count = newBookmarks.length;
     if (this.hintSpan) {
