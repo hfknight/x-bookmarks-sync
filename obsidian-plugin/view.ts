@@ -93,12 +93,15 @@ export class XBookmarksView extends ItemView {
 
     this.syncFromLastLabel = leftGroup.createEl('label', { cls: 'x-bookmarks-sync-label' });
     this.syncFromLastCheckbox = this.syncFromLastLabel.createEl('input', { type: 'checkbox' });
-    // Default to unchecked (full sync) if user has never imported any bookmarks
+    // Restore the remembered choice, but never on a vault that has imported nothing — a first run
+    // needs the whole history regardless of what the setting says.
     const hasImported = this.plugin.importedIds.size > 0;
-    this.incrementalMode = hasImported;
-    this.syncFromLastCheckbox.checked = hasImported;
+    this.incrementalMode = hasImported && this.plugin.settings.syncFromLast;
+    this.syncFromLastCheckbox.checked = this.incrementalMode;
     this.syncFromLastCheckbox.onchange = () => {
       this.incrementalMode = this.syncFromLastCheckbox!.checked;
+      this.plugin.settings.syncFromLast = this.incrementalMode;
+      void this.plugin.saveSettings();
       this.updateToolbar();
     };
     this.syncFromLastLabel.createSpan({ text: 'Sync from last' });
@@ -147,7 +150,15 @@ export class XBookmarksView extends ItemView {
     const dots = this.scanOverlay.createDiv({ cls: 'x-bookmarks-scan-dots' });
     for (let i = 0; i < 14; i++) dots.createDiv({ cls: 'x-bookmarks-scan-dot' });
     this.scanOverlay.createDiv({ cls: 'x-bookmarks-scan-line' });
-    this.scanLabel = this.scanOverlay.createDiv({ cls: 'x-bookmarks-scan-label', text: 'Scanning bookmarks…' });
+    // Two lines in one pill: the live count, and a standing reminder to keep Obsidian focused.
+    // A backgrounded window is throttled by Chromium — X fetches nothing and capture falls back to
+    // scraping whatever is still on screen — so this is the moment the advice is actionable.
+    const scanBox = this.scanOverlay.createDiv({ cls: 'x-bookmarks-scan-label' });
+    this.scanLabel = scanBox.createDiv({ text: 'Scanning bookmarks…' });
+    scanBox.createDiv({
+      cls: 'x-bookmarks-scan-hint',
+      text: 'Keep Obsidian in front — a background sync can miss bookmarks',
+    });
 
     this.webview.addEventListener('did-navigate', (e: Event & { url: string }) => {
       this.currentUrl = e.url;
@@ -1872,6 +1883,8 @@ export class XBookmarksView extends ItemView {
     modal.onImportComplete = (importedAll: boolean) => {
       this.incrementalMode = importedAll;
       if (this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = importedAll;
+      this.plugin.settings.syncFromLast = importedAll;
+      void this.plugin.saveSettings();
     };
     modal.onDidClose = () => { this.updateToolbar(); };
     modal.open();

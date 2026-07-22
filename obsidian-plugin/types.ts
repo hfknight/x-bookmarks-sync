@@ -64,4 +64,9 @@ export interface XBookmarksSyncData {
   // a large backlog means repeating the same batch size many times. Internal; the modal input is
   // the only place it's set, so there's no settings-panel entry to disagree with.
   selectBatchSize: number;
+  // The "Sync from last" checkbox, remembered. Set by the user ticking it, and by an import: taking
+  // everything offered turns it on, leaving bookmarks behind turns it off, because the shortcut
+  // would stop at exactly that leftover backlog and hide it. Persisted because the toolbar is
+  // rebuilt on every view open, so otherwise a reload mid-backlog silently re-enables the shortcut.
+  syncFromLast: boolean;
 }

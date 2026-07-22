@@ -73,6 +73,7 @@ export default class XBookmarksSync extends Plugin {
     forceFullScanOnNextSync: false,
     coverageProven: false,
     selectBatchSize: 100,
+    syncFromLast: false,
   };
   pendingOpenUrl: string | null = null;
 
@@ -90,6 +91,9 @@ export default class XBookmarksSync extends Plugin {
       // to establish a proven baseline, rather than trusting a waterline that was never verified.
       coverageProven: data?.coverageProven ?? false,
       selectBatchSize: data?.selectBatchSize ?? 100,
+      // Absent before 1.3.4: fall back to the old derived behaviour (on if anything was imported)
+      // so upgrading doesn't silently switch anyone to full scans.
+      syncFromLast: data?.syncFromLast ?? ((data?.importedIds?.length ?? 0) > 0),
     };
     this.importedIds = new Set(this.settings.importedIds);
     await this.maybeShowWhatsNew();
