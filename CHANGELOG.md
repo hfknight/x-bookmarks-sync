@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.4
+
+- **A sync that couldn't read your bookmarks now says so** — if Obsidian was in the background while a sync ran, X could serve no data at all, and the plugin would report "no new bookmarks" after reading only the handful of posts still on screen. It now tells you when it couldn't confirm it read your whole list, and the next sync runs a full scan. The scan display also reminds you to keep Obsidian in front while it works.
+- **Batch importing survives a restart** — after importing part of what was offered, "Sync from last" stays off so the next scan can reach the rest. Restarting Obsidian used to switch it back on and hide the remainder.
+
 ## 1.3.3
 
 - **Bookmarks are listed in the order you saved them** — the import list could show older bookmarks first. That also meant **First N** picked an arbitrary N rather than the newest N, so working through a backlog in batches could revisit some bookmarks and skip others. The list now follows X's own bookmark order.
