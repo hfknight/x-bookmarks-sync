@@ -361,7 +361,12 @@ export class XBookmarksView extends ItemView {
                   if ((c.entryType || c.itemType) === 'TimelineTimelineItem') itemCount++;
                 }
               }
-              if (sawAddEntries && itemCount === 0) window.__xbsSawEndOfList = true;
+              // A page with items proves the walk is actually reading the list. Without that,
+              // an empty response is not an end-of-list marker — X returns one when the page
+              // never really loaded (a backgrounded window, an unauthenticated state), and
+              // treating it as "the end" certifies a capture that read nothing.
+              if (sawAddEntries && itemCount > 0) window.__xbsSawItems = true;
+              if (sawAddEntries && itemCount === 0 && window.__xbsSawItems) window.__xbsSawEndOfList = true;
             } catch (e) {}
           }
           window.__xbsDetectEndOfList = __xbsDetectEndOfList;
@@ -557,7 +562,9 @@ export class XBookmarksView extends ItemView {
             if (ct0) headers['x-csrf-token'] = decodeURIComponent(ct0);
             if (!headers['authorization']) headers['authorization'] = 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
 
-            var resp = await fetch(u.toString(), { method: 'GET', headers: headers, credentials: 'include' });
+            // cache: 'no-store' — a paginated walk must never read a page from the HTTP cache, or it
+            // can assemble a list from responses captured at different moments.
+            var resp = await fetch(u.toString(), { method: 'GET', headers: headers, credentials: 'include', cache: 'no-store' });
             var status = resp.status;
             if (status !== 200) return JSON.stringify({ status: status });
             var data = await resp.json();
@@ -1389,7 +1396,7 @@ export class XBookmarksView extends ItemView {
       // Clear the end-of-list latch for this run. The navigation above already wipes webview
       // globals, but reset explicitly so the flag can never carry over from a previous capture.
       try {
-        await this.webview.executeJavaScript('window.__xbsSawEndOfList = false; window.__xbsOrder = {};');
+        await this.webview.executeJavaScript('window.__xbsSawEndOfList = false; window.__xbsSawItems = false; window.__xbsOrder = {};');
       } catch { /* webview mid-navigation — the latch starts false anyway */ }
 
       // Primary: deterministic cursor pagination. On 'captured' we skip straight to the shared
@@ -1786,7 +1793,16 @@ export class XBookmarksView extends ItemView {
     //   otherwise             → unproven: the run ended without reaching the end (scroll stall, a
     //                           repeated cursor, an error) and may have left a gap. Force a full scan.
     // Cancelled runs return earlier and leave the flag untouched — a cancel proves nothing either way.
-    if (reachedEnd) {
+    //
+    // All of that assumes the run actually read something from X. If not a single bookmark timeline
+    // response was seen, it read nothing at all — a backgrounded window is the common cause, where X
+    // never fetches and the scroll path scrapes whatever happens to be rendered. Such a run can
+    // reach the waterline (three screens of already-imported posts is trivially satisfied by five
+    // stale ones) and would otherwise inherit the previous run's proof and report being up to date.
+    const sawTimelineData = captureOrder.size > 0;
+    if (!sawTimelineData) {
+      this.plugin.settings.coverageProven = false;
+    } else if (reachedEnd) {
       this.plugin.settings.coverageProven = true;
     } else if (!this.stoppedAtWaterline) {
       this.plugin.settings.coverageProven = false;
@@ -1796,7 +1812,7 @@ export class XBookmarksView extends ItemView {
     // stuck doing a full scan every sync, and would otherwise be indistinguishable from a slow
     // account. A proven run needs no narration.
     if (!this.plugin.settings.coverageProven) {
-      console.warn(`[x-bookmarks] end of bookmark list not confirmed (reachedEnd=${reachedEnd}, stoppedAtWaterline=${this.stoppedAtWaterline}) — the next sync will run a full scan.`);
+      console.warn(`[x-bookmarks] end of bookmark list not confirmed (sawTimelineData=${sawTimelineData}, reachedEnd=${reachedEnd}, stoppedAtWaterline=${this.stoppedAtWaterline}) — the next sync will run a full scan.`);
     }
 
     // Consume the one-shot full-scan flag now that capture reached the end.
@@ -1805,6 +1821,16 @@ export class XBookmarksView extends ItemView {
       this.plugin.settings.forceFullScanOnNextSync = false;
     }
     await this.plugin.saveSettings();
+
+    // Say so when the run could not confirm it read the whole list. Without this the user is told
+    // "no new bookmarks" — which reads as "you're up to date" — after a capture that may have seen
+    // almost nothing. A backgrounded window produces exactly that: X serves no data, a handful of
+    // already-imported posts get scraped from the rendered page, and every downstream message
+    // reports success.
+    const coverageUnconfirmed = !this.plugin.settings.coverageProven;
+    if (coverageUnconfirmed) {
+      new Notice('Could not confirm your whole bookmark list was read — some may be missing. The next sync will run a full scan.', 8000);
+    }
 
     if (this.collectedBookmarks.size === 0) {
       new Notice('No bookmarks found.');
@@ -1832,7 +1858,8 @@ export class XBookmarksView extends ItemView {
     const modal = new BookmarkSelectionModal(
       this.app,
       this.plugin,
-      newBookmarks
+      newBookmarks,
+      coverageUnconfirmed
     );
     // Reset to incremental mode only after the user actually confirms import, not on extraction
     // completion — avoids flipping the checkbox if the modal is cancelled.

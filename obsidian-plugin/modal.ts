@@ -11,11 +11,16 @@ export class BookmarkSelectionModal extends Modal {
   onImportComplete?: (importedAll: boolean) => void;
   onDidClose?: () => void;
 
+  // Set when the capture could not confirm it read the whole list — the empty state must not then
+  // claim everything was scanned.
+  coverageUnconfirmed: boolean;
+
   // Receives only importable bookmarks — already-imported ones are filtered out by the caller.
-  constructor(app: App, plugin: XBookmarksSync, bookmarks: Tweet[]) {
+  constructor(app: App, plugin: XBookmarksSync, bookmarks: Tweet[], coverageUnconfirmed = false) {
     super(app);
     this.plugin = plugin;
     this.bookmarks = bookmarks;
+    this.coverageUnconfirmed = coverageUnconfirmed;
     this.selectedIds = new Set();
   }
 
@@ -127,7 +132,9 @@ export class BookmarkSelectionModal extends Modal {
       };
 
       if (this.bookmarks.length === 0) {
-        placeholder.setText('No new bookmarks — everything scanned is already imported.');
+        placeholder.setText(this.coverageUnconfirmed
+          ? 'Nothing new found, but this sync could not confirm it read your whole list — try again with Obsidian in the foreground.'
+          : 'No new bookmarks — everything scanned is already imported.');
       } else {
         placeholder.remove();
         for (const btn of [allBtn, noneBtn, firstBtn]) btn.disabled = false;
