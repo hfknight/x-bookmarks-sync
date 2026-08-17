@@ -3,7 +3,7 @@ import Defuddle from 'defuddle/full';
 import changelogText from '../CHANGELOG.md';
 import { VIEW_TYPE, XBookmarksSyncData, FileNameFormat, Tweet } from './types';
 import { renderQuotedSection } from './quoted';
-import { XBookmarksView } from './view';
+import { XBookmarksView, isBookmarksUrl } from './view';
 import { XBookmarksSyncSettingTab } from './settings-tab';
 import { WhatsNewModal, parseChangelog, notesSince } from './whats-new-modal';
 
@@ -196,7 +196,7 @@ export default class XBookmarksSync extends Plugin {
     // Reveal the view; if it's open on a tweet/article page (e.g. via protocol handler),
     // navigate to the bookmarks list so the user gets the extract toolbar.
     const existingView = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0]?.view as XBookmarksView | undefined;
-    if (existingView && !existingView.currentUrl.includes('/bookmarks')) {
+    if (existingView && !isBookmarksUrl(existingView.currentUrl)) {
       await this.openUrlInWebview('https://x.com/i/bookmarks');
       return;
     }

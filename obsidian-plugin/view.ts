@@ -13,6 +13,15 @@ interface ElectronWebview extends HTMLElement {
   loadURL(url: string): Promise<void>;
 }
 
+// X moved the bookmarks list to /i/history (tabs: Bookmarks at the root, Likes at
+// /i/history/likes) around Aug 2026; /i/bookmarks now redirects there. Both URLs must count as
+// "on the bookmarks page" — the Likes sub-tab must not. Verified live 2026-08-17: the History
+// page's Bookmarks tab still issues the same `Bookmarks` GraphQL operation, so only the URL
+// checks needed to change (issue #7).
+export function isBookmarksUrl(url: string): boolean {
+  return /\/i\/bookmarks(?:[/?#]|$)/.test(url) || /\/i\/history\/?(?:[?#]|$)/.test(url);
+}
+
 interface ExtractionResult {
   success: boolean;
   data: Tweet[];
@@ -641,7 +650,7 @@ export class XBookmarksView extends ItemView {
     };
 
     while (pages < MAX_PAGES) {
-      if (this.cancelRequested || !this.currentUrl.includes('/bookmarks')) {
+      if (this.cancelRequested || !isBookmarksUrl(this.currentUrl)) {
         stoppedReason = 'cancelled';
         break;
       }
@@ -850,7 +859,7 @@ export class XBookmarksView extends ItemView {
     if (this.isScrolling) return; // don't clobber scrolling state
     this.hideScanOverlay();      // not scrolling → no capture in flight → page visible
 
-    if (this.currentUrl.includes('/bookmarks')) {
+    if (isBookmarksUrl(this.currentUrl)) {
       const hint = this.incrementalMode ? 'Incremental' : 'Full scan';
       this.hintSpan.setText(hint);
       this.extractBtn.toggleClass('is-hidden', false);
@@ -1421,7 +1430,7 @@ export class XBookmarksView extends ItemView {
         if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
         this.updateToolbar();
         // Distinguish navigate-away from a deliberate Cancel click (same parity as the scroll path).
-        if (!this.currentUrl.includes('/bookmarks')) new Notice('Navigated away — bookmark capture cancelled.');
+        if (!isBookmarksUrl(this.currentUrl)) new Notice('Navigated away — bookmark capture cancelled.');
         return;
       }
       if (apiStatus === 'captured') {
@@ -1621,7 +1630,7 @@ export class XBookmarksView extends ItemView {
         }
 
         // Check navigation away
-        if (!this.currentUrl.includes('/bookmarks')) {
+        if (!isBookmarksUrl(this.currentUrl)) {
           await this.cleanup();
           this.isScrolling = false;
           if (overrideActiveThisRun && this.syncFromLastCheckbox) this.syncFromLastCheckbox.checked = this.incrementalMode;
