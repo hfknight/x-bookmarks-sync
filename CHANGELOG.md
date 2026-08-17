@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.5
+
+- **Works with X's new History page** — X moved bookmarks from `x.com/i/bookmarks` to the Bookmarks tab of the new `x.com/i/history` page, which made the **Extract bookmarks** button disappear. The plugin now recognizes the History page, so the button is back and syncing works exactly as before.
+
 ## 1.3.4
 
 - **A sync that couldn't read your bookmarks now says so** — if Obsidian was in the background while a sync ran, X could serve no data at all, and the plugin would report "no new bookmarks" after reading only the handful of posts still on screen. It now tells you when it couldn't confirm it read your whole list, and the next sync runs a full scan. The scan display also reminds you to keep Obsidian in front while it works.
