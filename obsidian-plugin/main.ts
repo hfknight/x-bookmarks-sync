@@ -1,7 +1,7 @@
 import { Plugin, addIcon, Notice, TFile, TFolder, MarkdownView } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import changelogText from '../CHANGELOG.md';
-import { VIEW_TYPE, XBookmarksSyncData, FileNameFormat, Tweet } from './types';
+import { VIEW_TYPE, X_SESSION_PARTITION, XBookmarksSyncData, FileNameFormat, Tweet } from './types';
 import { renderQuotedSection } from './quoted';
 import { XBookmarksView, isBookmarksUrl } from './view';
 import { XBookmarksSyncSettingTab } from './settings-tab';
@@ -9,6 +9,32 @@ import { WhatsNewModal, parseChangelog, notesSince } from './whats-new-modal';
 
 interface ElectronWebview extends HTMLElement {
   executeJavaScript(code: string): Promise<unknown>;
+}
+
+interface ElectronSessionLike {
+  fromPartition(partition: string): { clearStorageData(): Promise<void> };
+}
+
+// Obsidian's renderer exposes Node's require(); Electron's `remote` module lives either on
+// require('electron').remote (older Electron) or the separate require('@electron/remote')
+// package (newer Electron). Resolve whichever is present — neither is a hard dependency, so
+// failure here must be graceful (see signOutOfX).
+function resolveElectronSession(): ElectronSessionLike | null {
+  const req = (window as unknown as { require?: (id: string) => unknown }).require;
+  if (typeof req !== 'function') return null;
+  try {
+    const electron = req('electron') as { remote?: { session?: ElectronSessionLike } };
+    if (electron?.remote?.session) return electron.remote.session;
+  } catch {
+    // 'electron' module unavailable in this context — fall through to @electron/remote
+  }
+  try {
+    const remote = req('@electron/remote') as { session?: ElectronSessionLike };
+    if (remote?.session) return remote.session;
+  } catch {
+    // '@electron/remote' not installed — caller reports failure to the user
+  }
+  return null;
 }
 
 type FetchArticleResult =
@@ -74,8 +100,19 @@ export default class XBookmarksSync extends Plugin {
     coverageProven: false,
     selectBatchSize: 100,
     syncFromLast: false,
+    signedInHandle: null,
   };
   pendingOpenUrl: string | null = null;
+  settingTab: XBookmarksSyncSettingTab | null = null;
+
+  // Re-store the declarative setting definitions so dynamic descs (last sync, import count,
+  // signed-in handle) aren't served from the snapshot taken at addSettingTab() time. The 1.13+
+  // declarative renderer never calls display(), so this is the documented "dynamic tabs when
+  // their data changes" hook; on older hosts update() doesn't exist and display() rebuilds on
+  // every open anyway.
+  refreshSettingsTab(): void {
+    if (this.settingTab && typeof this.settingTab.update === 'function') this.settingTab.update();
+  }
 
   async onload() {
     const data = (await this.loadData()) as Partial<XBookmarksSyncData> | null;
@@ -94,6 +131,7 @@ export default class XBookmarksSync extends Plugin {
       // Absent before 1.3.4: fall back to the old derived behaviour (on if anything was imported)
       // so upgrading doesn't silently switch anyone to full scans.
       syncFromLast: data?.syncFromLast ?? ((data?.importedIds?.length ?? 0) > 0),
+      signedInHandle: data?.signedInHandle ?? null,
     };
     this.importedIds = new Set(this.settings.importedIds);
     await this.maybeShowWhatsNew();
@@ -159,7 +197,8 @@ export default class XBookmarksSync extends Plugin {
       }
     });
 
-    this.addSettingTab(new XBookmarksSyncSettingTab(this.app, this));
+    this.settingTab = new XBookmarksSyncSettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
   }
 
   onunload() {
@@ -174,6 +213,33 @@ export default class XBookmarksSync extends Plugin {
     } catch {
       new Notice('X bookmarks sync: failed to save settings.');
     }
+  }
+
+  // Clears the session partition's storage locally (does not invalidate the token on X's servers)
+  // and forgets the cached handle. Never touches sync state (importedIds, lastSyncAt,
+  // coverageProven, forceFullScanOnNextSync).
+  async signOutOfX(): Promise<void> {
+    const session = resolveElectronSession();
+    if (!session) {
+      new Notice('Could not sign out — please log out inside the bookmarks panel.');
+      return;
+    }
+    try {
+      await session.fromPartition(X_SESSION_PARTITION).clearStorageData();
+    } catch {
+      new Notice('Could not sign out — please log out inside the bookmarks panel.');
+      return;
+    }
+    this.settings.signedInHandle = null;
+    await this.saveSettings();
+    this.refreshSettingsTab();
+    // An open bookmarks view still shows the logged-in page from memory — force a real reload
+    // (loadURL, not src=; see loadUrl's no-op caveat) so it lands on X's login screen.
+    const view = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0]?.view;
+    if (view instanceof XBookmarksView && view.webview) {
+      void view.webview.loadURL('https://x.com/i/bookmarks').catch(() => {});
+    }
+    new Notice('Signed out of X.');
   }
 
   async openUrlInWebview(url: string) {
@@ -353,7 +419,7 @@ export default class XBookmarksSync extends Plugin {
     const container = activeDocument.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
     const webview = container.createEl('webview' as keyof HTMLElementTagNameMap, {
       cls: 'x-bookmarks-hidden-webview-frame',
-      attr: { src: url },
+      attr: { src: url, partition: X_SESSION_PARTITION },
     }) as unknown as ElectronWebview;
 
     try {
@@ -507,6 +573,7 @@ export default class XBookmarksSync extends Plugin {
     }
     this.settings.lastSyncAt = new Date().toISOString();
     await this.saveSettings();
+    this.refreshSettingsTab();
     new Notice(`Successfully saved ${count} new bookmarks!`);
   }
 

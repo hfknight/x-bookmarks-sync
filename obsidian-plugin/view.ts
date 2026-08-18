@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, Notice, setIcon, requestUrl } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import type XBookmarksSync from './main';
 import { BookmarkSelectionModal } from './modal';
-import { VIEW_TYPE, Tweet, QuotedTweet } from './types';
+import { VIEW_TYPE, X_SESSION_PARTITION, Tweet, QuotedTweet } from './types';
 import { SyndicationTweet, SyndicationMedia, parseQuotedTweet } from './quoted';
 
 const TWEET_OR_ARTICLE_URL = /\/(?:status|article)\/\d+/;
@@ -149,7 +149,7 @@ export class XBookmarksView extends ItemView {
 
     this.webview = webviewContainer.createEl('webview' as keyof HTMLElementTagNameMap, {
       cls: 'x-bookmarks-webview',
-      attr: { src: this.currentUrl },
+      attr: { src: this.currentUrl, partition: X_SESSION_PARTITION },
     }) as unknown as ElectronWebview;
 
     // Scan overlay shown over the (headlessly driven) webview during a capture so progress is
@@ -614,8 +614,55 @@ export class XBookmarksView extends ItemView {
           }
         };
       }
+
       void 0;
     `;
+  }
+
+  // Best-effort: cache the signed-in handle for the settings tab's signed-in indicator. Strictly
+  // non-fatal — any failure leaves the existing cached value untouched and must never affect the
+  // sync itself. No retries. Self-contained (inlines its whole script) so it works on BOTH capture
+  // paths: it uses the interceptor's request template when one exists, but only needs the ct0
+  // cookie + the public web bearer — present whenever the user is logged in.
+  private async captureSignedInHandle(): Promise<void> {
+    if (!this.webview) return;
+    try {
+      const raw = await this.webview.executeJavaScript(`
+        (async function() {
+          try {
+            var tmpl = window.__xbsReqTemplate;
+            var headers = {};
+            var th = (tmpl && tmpl.headers) || {};
+            for (var hk in th) { if (Object.prototype.hasOwnProperty.call(th, hk)) headers[hk] = th[hk]; }
+            delete headers['x-client-transaction-id'];
+            var ct0 = (document.cookie.match(/(?:^|; )ct0=([^;]+)/) || [])[1];
+            if (ct0) headers['x-csrf-token'] = decodeURIComponent(ct0);
+            if (!headers['authorization']) headers['authorization'] = 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+            // account/multi/list.json = the account-switcher's own endpoint (1.1 settings.json was
+            // removed by X — returns 404 as of 2026-08-18, verified live). Lists every signed-in
+            // account; is_active marks the current one (absent when only one account is signed in).
+            var resp = await fetch('https://x.com/i/api/1.1/account/multi/list.json', { method: 'GET', headers: headers, credentials: 'include', cache: 'no-store' });
+            if (resp.status !== 200) return JSON.stringify({ error: 'status-' + resp.status });
+            var data = await resp.json();
+            var users = (data && data.users) || [];
+            var active = users.find(function(u) { return u && u.is_active; }) || users[0];
+            return JSON.stringify({ screen_name: active && active.screen_name });
+          } catch (e) {
+            return JSON.stringify({ error: String((e && e.message) || e) });
+          }
+        })()
+      `) as string;
+      const data = JSON.parse(raw) as { screen_name?: unknown; error?: unknown };
+      if (typeof data.screen_name === 'string' && data.screen_name) {
+        this.plugin.settings.signedInHandle = data.screen_name;
+        await this.plugin.saveSettings();
+        this.plugin.refreshSettingsTab();
+      } else {
+        console.warn(`[x-bookmarks] could not capture signed-in handle: ${String(data.error ?? 'no screen_name in response')}`);
+      }
+    } catch (e) {
+      console.warn('[x-bookmarks] could not capture signed-in handle:', e);
+    }
   }
 
   // Deterministic capture (Milestone 1): replay the page's own Bookmarks request and walk the
@@ -872,7 +919,10 @@ export class XBookmarksView extends ItemView {
       this.hintSpan.setText('');
       this.extractBtn.toggleClass('is-hidden', true);
       this.importBtn.toggleClass('is-hidden', !TWEET_OR_ARTICLE_URL.test(this.currentUrl));
-      this.copyBtn.toggleClass('is-hidden', false);
+      // X's auth flows have no main content worth copying — visible since sign-out started
+      // landing users on the login page. Two known URL schemes: /i/flow/login|signup (classic)
+      // and /i/jf/onboarding/web?…&mode=login (observed live 2026-08-18).
+      this.copyBtn.toggleClass('is-hidden', /\/i\/(flow|jf)\//.test(this.currentUrl));
       if (this.syncFromLastLabel) this.syncFromLastLabel.toggleClass('is-hidden', true);
     }
   }
@@ -944,7 +994,7 @@ export class XBookmarksView extends ItemView {
     const container = activeDocument.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
     const hidden = container.createEl('webview' as keyof HTMLElementTagNameMap, {
       cls: 'x-bookmarks-hidden-webview-frame',
-      attr: { src: targets[0].url },
+      attr: { src: targets[0].url, partition: X_SESSION_PARTITION },
     }) as unknown as ElectronWebview;
 
     try {
@@ -1418,6 +1468,10 @@ export class XBookmarksView extends ItemView {
       try {
         await this.webview.executeJavaScript('window.__xbsSawEndOfList = false; window.__xbsSawItems = false; window.__xbsOrder = {};');
       } catch { /* webview mid-navigation — the latch starts false anyway */ }
+
+      // Once per sync, path-independent (runs concurrently with either capture path). Only needs
+      // the logged-in cookies, which the navigation above has already established.
+      void this.captureSignedInHandle();
 
       // Primary: deterministic cursor pagination. On 'captured' we skip straight to the shared
       // finalize tail; on 'fallback' we flow into today's scroll path below (worst case = current

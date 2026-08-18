@@ -1,5 +1,10 @@
 export const VIEW_TYPE = 'x-bookmarks-webview';
 
+// Dedicated Electron session partition for all plugin webviews (visible + hidden), isolating the
+// X session from the rest of Obsidian. Effectively frozen — see docs/adr/0001-dedicated-session-partition.md;
+// changing this string logs every existing user out again.
+export const X_SESSION_PARTITION = 'persist:x-bookmarks-sync';
+
 export interface ArticleCard {
   url: string;
   title: string;
@@ -69,4 +74,7 @@ export interface XBookmarksSyncData {
   // would stop at exactly that leftover backlog and hide it. Persisted because the toolbar is
   // rebuilt on every view open, so otherwise a reload mid-backlog silently re-enables the shortcut.
   syncFromLast: boolean;
+  // Screen name of the signed-in X account, cached from the most recent sync. Deliberately stale
+  // (never probed live) — shown in the settings tab's signed-in indicator, and cleared on sign out.
+  signedInHandle: string | null;
 }

@@ -162,3 +162,42 @@ export class BookmarkSelectionModal extends Modal {
     this.onDidClose?.();
   }
 }
+
+// Confirms clearing the session partition's storage (see settings-tab.ts). Only clears the local
+// X session — never touches sync state (importedIds, lastSyncAt, coverageProven, etc.).
+export class SignOutConfirmModal extends Modal {
+  handle: string | null;
+  onConfirm: () => void;
+
+  constructor(app: App, handle: string | null, onConfirm: () => void) {
+    super(app);
+    this.handle = handle;
+    this.onConfirm = onConfirm;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl('h2', { text: 'Sign out of X' });
+    contentEl.createEl('p', {
+      text: this.handle
+        ? `Sign out @${this.handle}? You'll need to log in to X again to sync.`
+        : `Sign out? You'll need to log in to X again to sync.`,
+    });
+
+    const btnContainer = contentEl.createDiv({ cls: 'bookmark-modal-btn-container' });
+
+    const cancelBtn = btnContainer.createEl('button', { text: 'Cancel' });
+    cancelBtn.onclick = () => this.close();
+
+    const signOutBtn = btnContainer.createEl('button', { text: 'Sign out', cls: 'mod-warning' });
+    signOutBtn.onclick = () => {
+      this.close();
+      this.onConfirm();
+    };
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
