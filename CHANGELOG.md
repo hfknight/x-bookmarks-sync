@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+
+- **Sign out of X from settings** — Settings now has an **Account** section with a **Sign out of X** button (with confirmation). Signing out clears the plugin's X session and takes the bookmarks panel back to X's login page; your imported notes and sync history are untouched.
+- **See which account you're signed in as** — after a sync, the Account section shows "Signed in as @yourhandle", updated each time you sync.
+- **You'll be asked to log in to X once after this update** — your X session now lives in the plugin's own isolated storage instead of Obsidian's shared browser storage. That isolation is what makes signing out safe and keeps your X session private to this plugin. Log in once and everything continues as before.
+- **Settings are now searchable** — the plugin's settings appear in Obsidian's settings search (Obsidian 1.13+).
+
 ## 1.3.5
 
 - **Works with X's new History page** — X moved bookmarks from `x.com/i/bookmarks` to the Bookmarks tab of the new `x.com/i/history` page, which made the **Extract bookmarks** button disappear. The plugin now recognizes the History page, so the button is back and syncing works exactly as before.
