@@ -1,4 +1,4 @@
-import { Plugin, addIcon, Notice, TFile, TFolder, MarkdownView } from 'obsidian';
+import { Plugin, addIcon, Notice, TFile, TFolder, MarkdownView, requireApiVersion } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import changelogText from '../CHANGELOG.md';
 import { VIEW_TYPE, X_SESSION_PARTITION, XBookmarksSyncData, FileNameFormat, Tweet } from './types';
@@ -108,10 +108,9 @@ export default class XBookmarksSync extends Plugin {
   // Re-store the declarative setting definitions so dynamic descs (last sync, import count,
   // signed-in handle) aren't served from the snapshot taken at addSettingTab() time. The 1.13+
   // declarative renderer never calls display(), so this is the documented "dynamic tabs when
-  // their data changes" hook; on older hosts update() doesn't exist and display() rebuilds on
-  // every open anyway.
+  // their data changes" hook; on older hosts display() rebuilds on every open anyway.
   refreshSettingsTab(): void {
-    if (this.settingTab && typeof this.settingTab.update === 'function') this.settingTab.update();
+    if (requireApiVersion('1.13.0') && this.settingTab) this.settingTab.update();
   }
 
   async onload() {

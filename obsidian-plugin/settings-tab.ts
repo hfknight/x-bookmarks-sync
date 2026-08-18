@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting, requireApiVersion } from 'obsidian';
 import type { SettingControl, SettingDefinition } from 'obsidian';
 import type XBookmarksSync from './main';
 import { SignOutConfirmModal } from './modal';
@@ -117,7 +117,7 @@ export class XBookmarksSyncSettingTab extends PluginSettingTab {
 
   // Re-render after imperative state changes (e.g. clearing import history).
   private refresh(): void {
-    if (typeof this.update === 'function') {
+    if (requireApiVersion('1.13.0')) {
       this.update();
     } else {
       this.display();
