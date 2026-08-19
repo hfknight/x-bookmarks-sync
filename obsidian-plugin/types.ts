@@ -5,6 +5,14 @@ export const VIEW_TYPE = 'x-bookmarks-webview';
 // changing this string logs every existing user out again.
 export const X_SESSION_PARTITION = 'persist:x-bookmarks-sync';
 
+// Stock-Chrome user agent for all plugin webviews: Obsidian's own UA with the obsidian/… and
+// Electron/… tokens stripped. X's login flow (the "Confirm your account" bot check in particular)
+// silently rejects clients that advertise Electron — see issue #8. Applied to every webview so the
+// shared session presents one consistent identity.
+export const X_WEBVIEW_UA = navigator.userAgent
+  .replace(/\s?obsidian\/[\d.]+/gi, '')
+  .replace(/\s?Electron\/[\d.]+/gi, '');
+
 export interface ArticleCard {
   url: string;
   title: string;

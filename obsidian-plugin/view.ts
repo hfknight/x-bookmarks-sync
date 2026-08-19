@@ -2,7 +2,7 @@ import { ItemView, WorkspaceLeaf, Notice, setIcon, requestUrl } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import type XBookmarksSync from './main';
 import { BookmarkSelectionModal } from './modal';
-import { VIEW_TYPE, X_SESSION_PARTITION, Tweet, QuotedTweet } from './types';
+import { VIEW_TYPE, X_SESSION_PARTITION, X_WEBVIEW_UA, Tweet, QuotedTweet } from './types';
 import { SyndicationTweet, SyndicationMedia, parseQuotedTweet } from './quoted';
 
 const TWEET_OR_ARTICLE_URL = /\/(?:status|article)\/\d+/;
@@ -149,7 +149,7 @@ export class XBookmarksView extends ItemView {
 
     this.webview = webviewContainer.createEl('webview' as keyof HTMLElementTagNameMap, {
       cls: 'x-bookmarks-webview',
-      attr: { src: this.currentUrl, partition: X_SESSION_PARTITION },
+      attr: { src: this.currentUrl, partition: X_SESSION_PARTITION, useragent: X_WEBVIEW_UA },
     }) as unknown as ElectronWebview;
 
     // Scan overlay shown over the (headlessly driven) webview during a capture so progress is
@@ -994,7 +994,7 @@ export class XBookmarksView extends ItemView {
     const container = activeDocument.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
     const hidden = container.createEl('webview' as keyof HTMLElementTagNameMap, {
       cls: 'x-bookmarks-hidden-webview-frame',
-      attr: { src: targets[0].url, partition: X_SESSION_PARTITION },
+      attr: { src: targets[0].url, partition: X_SESSION_PARTITION, useragent: X_WEBVIEW_UA },
     }) as unknown as ElectronWebview;
 
     try {

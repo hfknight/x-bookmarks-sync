@@ -1,7 +1,7 @@
 import { Plugin, addIcon, Notice, TFile, TFolder, MarkdownView, requireApiVersion } from 'obsidian';
 import Defuddle from 'defuddle/full';
 import changelogText from '../CHANGELOG.md';
-import { VIEW_TYPE, X_SESSION_PARTITION, XBookmarksSyncData, FileNameFormat, Tweet } from './types';
+import { VIEW_TYPE, X_SESSION_PARTITION, X_WEBVIEW_UA, XBookmarksSyncData, FileNameFormat, Tweet } from './types';
 import { renderQuotedSection } from './quoted';
 import { XBookmarksView, isBookmarksUrl } from './view';
 import { XBookmarksSyncSettingTab } from './settings-tab';
@@ -418,7 +418,7 @@ export default class XBookmarksSync extends Plugin {
     const container = activeDocument.body.createDiv({ cls: 'x-bookmarks-hidden-webview' });
     const webview = container.createEl('webview' as keyof HTMLElementTagNameMap, {
       cls: 'x-bookmarks-hidden-webview-frame',
-      attr: { src: url, partition: X_SESSION_PARTITION },
+      attr: { src: url, partition: X_SESSION_PARTITION, useragent: X_WEBVIEW_UA },
     }) as unknown as ElectronWebview;
 
     try {
