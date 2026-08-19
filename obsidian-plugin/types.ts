@@ -1,3 +1,5 @@
+import { Platform } from 'obsidian';
+
 export const VIEW_TYPE = 'x-bookmarks-webview';
 
 // Dedicated Electron session partition for all plugin webviews (visible + hidden), isolating the
@@ -5,13 +7,18 @@ export const VIEW_TYPE = 'x-bookmarks-webview';
 // changing this string logs every existing user out again.
 export const X_SESSION_PARTITION = 'persist:x-bookmarks-sync';
 
-// Stock-Chrome user agent for all plugin webviews: Obsidian's own UA with the obsidian/… and
-// Electron/… tokens stripped. X's login flow (the "Confirm your account" bot check in particular)
-// silently rejects clients that advertise Electron — see issue #8. Applied to every webview so the
-// shared session presents one consistent identity.
-export const X_WEBVIEW_UA = navigator.userAgent
-  .replace(/\s?obsidian\/[\d.]+/gi, '')
-  .replace(/\s?Electron\/[\d.]+/gi, '');
+// Stock-Chrome user agent for all plugin webviews. X's login flow (the "Confirm your account" bot
+// check in particular) silently rejects clients whose UA advertises Electron/Obsidian — see issue
+// #8. Chrome's UA is frozen per-OS, so the only live part is the Chrome version, taken from the
+// bundled Chromium via process.versions (always present — the plugin is desktop-only). Applied to
+// every webview so the shared session presents one consistent identity.
+declare const process: { versions: { chrome: string } };
+const CHROME_OS_TOKEN = Platform.isMacOS ? 'Macintosh; Intel Mac OS X 10_15_7'
+  : Platform.isWin ? 'Windows NT 10.0; Win64; x64'
+  : 'X11; Linux x86_64';
+export const X_WEBVIEW_UA =
+  `Mozilla/5.0 (${CHROME_OS_TOKEN}) AppleWebKit/537.36 (KHTML, like Gecko) ` +
+  `Chrome/${process.versions.chrome} Safari/537.36`;
 
 export interface ArticleCard {
   url: string;
