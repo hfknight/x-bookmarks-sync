@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1
+
+- **Fixes getting stuck on X's "Confirm your account" login page** ([#8](https://github.com/hfknight/x-bookmarks-sync/issues/8)) — when X asked you to confirm your username during login, the Continue button could do nothing, leaving you stuck. The plugin's browser view now identifies itself as a regular Chrome browser, which X's login check accepts.
+
 ## 1.4.0
 
 - **Sign out of X from settings** — Settings now has an **Account** section with a **Sign out of X** button (with confirmation). Signing out clears the plugin's X session and takes the bookmarks panel back to X's login page; your imported notes and sync history are untouched.
