@@ -1237,7 +1237,8 @@ export class XBookmarksView extends ItemView {
       const defuddle = new Defuddle(doc, {
         url: this.currentUrl,
         markdown: true,
-        contentSelector: 'article[data-testid="tweet"]'
+        contentSelector: 'article[data-testid="tweet"]',
+        useAsync: false, // DOM only — no third-party FxTwitter/oEmbed fetch (see fetchArticleByHiddenWebview)
       });
 
       const result = await defuddle.parseAsync();

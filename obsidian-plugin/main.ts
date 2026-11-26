@@ -449,7 +449,9 @@ export default class XBookmarksSync extends Plugin {
       ) as string;
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
-      const defuddle = new Defuddle(doc, { url, markdown: true });
+      // useAsync: false keeps extraction on the webview DOM — defuddle ≥0.19 otherwise prefers a
+      // third-party FxTwitter/oEmbed fetch for detached documents on /status|article/ URLs.
+      const defuddle = new Defuddle(doc, { url, markdown: true, useAsync: false });
       const result = await defuddle.parseAsync();
       if (result && result.content) {
         const title = (result as { title?: unknown }).title;

@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit -p obsidian-plugin/tsconfig.json"
   },
   "dependencies": {
-    "defuddle": "^0.18.1"
+    "defuddle": "^0.19.13"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
