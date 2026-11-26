@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.2
+
+- **Note filenames no longer contain `#`, `^`, `[` or `]`** ([#10](https://github.com/hfknight/x-bookmarks-sync/issues/10)) — a bookmark starting with a hashtag such as `#CancelStudentDebt` produced a filename containing `#`, which breaks `[[links]]` to the note and makes some sync tools (e.g. Self-hosted LiveSync) silently skip the file. These characters are now left out of new notes' filenames. Existing notes keep their names; renaming one won't cause it to be imported again.
+- **Security update for article import** — updated the Defuddle library (and the XML parser it uses) to versions without known vulnerabilities. Article import and **Copy main content** still read only the page loaded in the plugin's X view.
+
 ## 1.4.1
 
 - **Fixes getting stuck on X's "Confirm your account" login page** ([#8](https://github.com/hfknight/x-bookmarks-sync/issues/8)) — when X asked you to confirm your username during login, the Continue button could do nothing, leaving you stuck. The plugin's browser view now identifies itself as a regular Chrome browser, which X's login check accepts.
