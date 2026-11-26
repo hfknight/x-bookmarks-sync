@@ -516,8 +516,8 @@ export default class XBookmarksSync extends Plugin {
   }
 
   private buildFileNameInDir(dir: string, id: string, authorRaw: string, titleRaw: string): string {
-    // Sanitize: first line only, strip filename-illegal chars, trim.
-    const clean = (s: string) => s.split('\n')[0].replace(/[\\/:"*?<>|]/g, '').trim();
+    // Sanitize: first line only, strip filename-illegal and link-breaking (#^[]) chars, trim.
+    const clean = (s: string) => s.split('\n')[0].replace(/[\\/:"*?<>|#^[\]]/g, '').trim();
     const date = tweetDateString(id);
     // Byte-budget each variable part so the whole filename stays well under the 255-byte limit
     // (author ~60 + title ~110 + date 10 + separators/.md ≈ 185, leaving room for a -N suffix).
